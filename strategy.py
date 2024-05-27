@@ -70,7 +70,7 @@ class MyStrategy(Strategy):
         super().__init__(logger=logger, log_level=log_level)
 
         # Setup target symbols
-        self.__symbols = ["006208"]
+        self.__symbols = ["006208", "9962", "2243"]
         self.__latest_timestamp = {}
         self.__locks = {}
         for s in self.__symbols:
@@ -111,9 +111,11 @@ class MyStrategy(Strategy):
 
         while now_time < datetime.time(13, 32):
             if now_time > datetime.time(13, 20):
+                clean_list = []
+
                 for symbol in self.__position_info.keys():
                     # DayTrade 全部出場
-                    if self.__position_info[symbol]["size"] >= 1000 and \
+                    if int(self.__position_info[symbol]["size"]) >= 1000 and \
                             (symbol not in self.__closure_order_placed.keys()):
                         self.logger.info(f"{symbol} 全出場條件成立 ...")
 
@@ -143,11 +145,28 @@ class MyStrategy(Strategy):
                         else:
                             self.logger.warning(f"{symbol} 全出場下單失敗, size {qty}, msg: {response.message}")
 
+                    else:
+                        self.logger.debug(f"(Closure session) symbol {symbol}")
+                        self.logger.debug(f"(Closure session) position info: {self.__position_info}")
+                        self.logger.debug(
+                            f"(Closure session) closure order placed keys: {self.__closure_order_placed.keys()}")
+                        clean_list.append(symbol)
+
+                # Execute position info cleaning
+                for symbol in clean_list:
+                    try:
+                        del self.__position_info[symbol]
+                    finally:
+                        self.sdk_manager.unsubscribe_realtime_trades(symbol)
+
             # sleep
             time.sleep(1)
 
+            # Update the time
+            now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
+
     def __realtime_price_data_processor(self, data):
-        self.logger.debug(f"marketdata: {data}")
+        # self.logger.debug(f"marketdata: {data}")
         try:
             symbol = data["symbol"]
             timestamp = int(data["time"])
@@ -207,7 +226,7 @@ class MyStrategy(Strategy):
 
                         current_pnl_pct = 100 * (sell_price - mid_price) / mid_price
 
-                        if current_pnl_pct >= 3 or current_pnl_pct <= -1:
+                        if current_pnl_pct >= 6 or current_pnl_pct <= -2:
                             self.logger.info(f"{symbol} 停損/停利條件成立 ...")
 
                             order = Order(
@@ -239,13 +258,13 @@ class MyStrategy(Strategy):
         self.logger.debug(f"__order_filled_processor: code {code}, filled_data\n{filled_data}")
 
         if filled_data is not None:
-            user_def = filled_data.user_def
-            symbol = filled_data.stock_no
+            user_def = str(filled_data.user_def)
+            symbol = str(filled_data.stock_no)
             account_no = str(filled_data.account)
             filled_qty = int(filled_data.filled_qty)
             filled_price = float(filled_data.filled_price)
 
-            target_account_no = self.sdk_manager.active_account.account
+            target_account_no = str(self.sdk_manager.active_account.account)
 
             if account_no == target_account_no:
                 if user_def == "hvl_enter":
@@ -267,6 +286,8 @@ class MyStrategy(Strategy):
                             "size": new_size
                         }
 
+                    self.logger.debug(f"position_info updated (enter): {self.__position_info}")
+
                 elif user_def in ["hvl_stop", "hvl_closure"]:
                     if symbol not in self.__position_info:
                         self.logger.debug(f"Symbol {symbol} is not in self.__position_info")
@@ -283,6 +304,8 @@ class MyStrategy(Strategy):
 
                         else:
                             self.__position_info[symbol]["size"] = original_size - filled_qty
+
+                        self.logger.debug(f"position_info updated (stop/closure): {self.__position_info}")
 
         else:
             self.logger.error(f"Filled order error event: code {code}, filled_data {filled_data}")

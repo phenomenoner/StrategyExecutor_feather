@@ -28,7 +28,7 @@ def check_sdk(func):
 
 
 class SDKManager:
-    __version__ = "2024.0.1"
+    __version__ = "2024.0.2"
 
     def __init__(self, max_marketdata_ws_connect=2, thread_pool_workers=12, logger=None, log_level=logging.DEBUG):
         # Set logger
@@ -224,9 +224,9 @@ class SDKManager:
 
     def __re_login(self, retry_counter=0, max_retry=20):
         if retry_counter > max_retry:
-            self.__logger.error(f"交易連線重試次數過多，中止程式")
+            self.__logger.error(f"交易連線重試次數過多 {retry_counter}，延長重試時間")
             self.__is_alive = False
-            return False
+            time.sleep(5)
 
         try:
             self.__is_relogin_running = True
@@ -332,52 +332,58 @@ class SDKManager:
         self.__logger.debug(f"Marketdata ws disconnected. code {code}, msg {message}")
         self.__is_marketdata_ws_connect = False
 
-        with self.__process_lock:
-            self.__handle_marketdata_ws_disconnect_threading(code, message)
+        t = threading.Thread(
+            target=self.__handle_marketdata_ws_disconnect_threading,
+            args=(code, message)
+        )
+
+        t.start()
+        t.join()
 
     def __handle_marketdata_ws_disconnect_threading(self, code, message):
-        if self.on_disconnect_callback is None:  # For planned termination
-            return
+        with self.__process_lock:
+            if self.on_disconnect_callback is None:  # For planned termination
+                return
 
-        # with self.__process_lock:
-        if self.__is_marketdata_ws_connect:  # Already reconnected
-            self.__logger.debug(f"self.__is_marketdata_ws_connect is {self.__is_marketdata_ws_connect}, ignore...")
-            return
+            # with self.__process_lock:
+            if self.__is_marketdata_ws_connect:  # Already reconnected
+                self.__logger.debug(f"self.__is_marketdata_ws_connect is {self.__is_marketdata_ws_connect}, ignore...")
+                return
 
-        if self.__is_relogin_running:
-            self.__logger.debug(f"self.__is_relogin_running is {self.__is_relogin_running}, ignore ...")
-            return
+            if self.__is_relogin_running:
+                self.__logger.debug(f"self.__is_relogin_running is {self.__is_relogin_running}, ignore ...")
+                return
 
-        self.__logger.debug(f"Marketdata ws reconnecting ...")
+            self.__logger.debug(f"Marketdata ws reconnecting ...")
 
-        # Test if the trade connection is alive
-        try:
-            if self.is_login():
-                response = self.sdk.stock.margin_quota(self.active_account, "2330")
-                self.__logger.debug(f"Trade connection test response\n{response}")
+            # Test if the trade connection is alive
+            try:
+                if self.is_login():
+                    response = self.sdk.stock.margin_quota(self.accounts[0], "2330")
+                    self.__logger.debug(f"Trade connection test response\n{response}")
 
-                if not response.is_success and "Login Error" in response.message:
-                    self.__logger.info(f"重連交易連線 ...")
-                    self.__re_login()
+                    if not response.is_success and "Login Error" in response.message:
+                        self.__logger.info(f"重連交易連線 ...")
+                        self.__re_login()
 
-        finally:
-            # Reconnect marketdata
-            self.establish_marketdata_connection(reconnect=True)
+            finally:
+                # Reconnect marketdata
+                self.establish_marketdata_connection(reconnect=True)
 
-            # Resubscribe all stocks
-            previous_subscription_list = self.__ws_subscription_list.copy()
-            self.__ws_subscription_list = []  # Reset the subscription list
-            self.__subscription_details = {}
+                # Resubscribe all stocks
+                previous_subscription_list = self.__ws_subscription_list.copy()
+                self.__ws_subscription_list = []  # Reset the subscription list
+                self.__subscription_details = {}
 
-            for symbol in previous_subscription_list:
-                self.subscribe_realtime_trades(symbol)
-                time.sleep(0.1)
+                for symbol in previous_subscription_list:
+                    self.subscribe_realtime_trades(symbol)
+                    time.sleep(0.1)
 
     @check_is_terminated
     def establish_marketdata_connection(self, reconnect=False, retry_counter=0, max_retry=5):
         if retry_counter > max_retry:
-            self.__logger.error(f"登入失敗重試次數達上限，停止嘗試")
-            return False
+            self.__logger.error(f"登入失敗重試過多 {retry_counter}，延長重試時間 ...")
+            time.sleep(5)
 
         if not self.is_login():
             self.__logger.error("請先登入SDK")
@@ -575,6 +581,9 @@ class SDKManager:
                         # Remove async lock
                         del self.__async_lock_by_symbol[symbol]
 
+                    elif msg["event"] == "heartbeat":
+                        self.__logger.debug(f"marketdata - {message}")
+
                     # Pass the message to the custom callback function
                     self.__event_loop.create_task(
                         self.__ws_on_message_handler_task(msg)
@@ -584,7 +593,7 @@ class SDKManager:
                     self.__logger.error(f"__ws_on_message_handler error: {e}, msg = {message}")
 
     async def __ws_on_message_handler_task(self, message: dict):
-        self.__logger.debug(f"marketdata message: {message}")
+        # self.__logger.debug(f"marketdata message: {message}")
 
         try:
             if message["event"] == "data":
