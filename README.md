@@ -1,3 +1,3 @@
 FubonNeo SDK Manager
-* SDK Manager: SDKManager.py
+* SDK Manager: sdk_manager_async.py
 * Example usage: strategy.py
