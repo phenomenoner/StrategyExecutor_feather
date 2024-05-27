@@ -4,17 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="15090870-0ffd-4814-b058-5b785b3f8f37" name="Changes" comment="SDKManager:&#10;    __version__ = &quot;2024.0.1&quot;">
-      <change afterPath="$PROJECT_DIR$/.idea/StrategyExecutor_feather.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    <list default="true" id="15090870-0ffd-4814-b058-5b785b3f8f37" name="Changes" comment="2024-05-27">
       <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sdk_manager_async.py" beforeDir="false" afterPath="$PROJECT_DIR$/sdk_manager_async.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/strategy.py" beforeDir="false" afterPath="$PROJECT_DIR$/strategy.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -90,11 +82,20 @@
       <option name="project" value="LOCAL" />
       <updated>1716621349810</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="2024-05-27">
+      <option name="closed" value="true" />
+      <created>1716789589254</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1716789589254</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="SDKManager:&#10;    __version__ = &quot;2024.0.1&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="SDKManager:&#10;    __version__ = &quot;2024.0.1&quot;" />
+    <MESSAGE value="2024-05-27" />
+    <option name="LAST_COMMIT_MESSAGE" value="2024-05-27" />
   </component>
 </project>
