@@ -28,7 +28,7 @@ def check_sdk(func):
 
 
 class SDKManager:
-    __version__ = "2024.0.2"
+    __version__ = "2024.0.3"
 
     def __init__(self, max_marketdata_ws_connect=2, thread_pool_workers=12, logger=None, log_level=logging.DEBUG):
         # Set logger
@@ -380,7 +380,7 @@ class SDKManager:
                     time.sleep(0.1)
 
     @check_is_terminated
-    def establish_marketdata_connection(self, reconnect=False, retry_counter=0, max_retry=5):
+    def establish_marketdata_connection(self, reconnect=False, retry_counter=0, max_retry=5, disconnect=None):
         if retry_counter > max_retry:
             self.__logger.error(f"登入失敗重試過多 {retry_counter}，延長重試時間 ...")
             time.sleep(5)
@@ -392,9 +392,18 @@ class SDKManager:
         self.__logger.info("建立行情連線...")
 
         try:
+            disconnect_threads = []
+
             # Disconnect all current websocket if any
             for ws in self.__ws_connections:
-                ws.disconnect()
+                t = threading.Thread(target=ws.disconnect)
+                disconnect_threads.append(t)
+
+            for t in disconnect_threads:
+                t.start()
+
+            for t in disconnect_threads:
+                t.join()
 
         except Exception as e:
             self.__logger.debug(f"Marketdata ws exception: {e}")
@@ -604,7 +613,7 @@ class SDKManager:
                 if symbol in self.__async_lock_by_symbol.keys():
                     async with self.__async_lock_by_symbol[symbol]:
                         if symbol not in self.__latest_timestamp.keys() or \
-                                timestamp >  self.__latest_timestamp[symbol]:
+                                timestamp > self.__latest_timestamp[symbol]:
                             self.__latest_timestamp[symbol] = timestamp
                             self.on_message_callback(message["data"])
 

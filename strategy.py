@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from fubon_neo.sdk import FubonSDK, Order
 from fubon_neo.constant import TimeInForce, OrderType, PriceType, MarketType, BSAction
 
+
 class Strategy(ABC):
     """
     Strategy template class
@@ -36,6 +37,7 @@ class Strategy(ABC):
     """
         Public Functions
     """
+
     def set_sdk_manager(self, sdk_manager: SDKManager):
         self.sdk_manager = sdk_manager
         self.logger.info(f"The SDKManager version: {self.sdk_manager.__version__}")
@@ -70,11 +72,11 @@ class MyStrategy(Strategy):
         super().__init__(logger=logger, log_level=log_level)
 
         # Setup target symbols
-        self.__symbols = ["006208", "9962", "2243"]
-        self.__latest_timestamp = {}
-        self.__locks = {}
-        for s in self.__symbols:
-            self.__locks[s] = threading.Lock()
+        self.__symbols = ["3605"]
+        # self.__latest_timestamp = {}
+        # self.__locks = {}
+        # for s in self.__symbols:
+        #     self.__locks[s] = threading.Lock()
 
         # Price data
         self.__lastday_close = {}
@@ -83,6 +85,12 @@ class MyStrategy(Strategy):
         self.__open_order_placed = {}
         self.__position_info = {}
         self.__closure_order_placed = {}
+
+        self.__on_going_orders = {}  # {symbol -> [seq_no]}
+        self.__on_going_orders_lock = {}
+        for s in self.__symbols:
+            self.__on_going_orders[s] = []
+            self.__on_going_orders_lock[s] = threading.Lock()
 
     @check_sdk
     def run(self):
@@ -103,8 +111,62 @@ class MyStrategy(Strategy):
             self.sdk_manager.subscribe_realtime_trades(symbol)
             time.sleep(0.1)
 
-        # Start position closure agent
+        # Start position closure and order update agents
+        t = threading.Thread(target=self.__order_status_updater)
+
+        t.start()
         self.__position_closure_executor()
+        t.join()
+
+    def __order_status_updater(self):
+        now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
+        self.logger.info(f"Start __order_status_updater")
+
+        while now_time < datetime.time(13, 32):
+            # Check if anything to check
+            if not all(len(lst) == 0 for lst in self.__on_going_orders.values()):
+                # Get order results
+                try:
+                    the_account = self.sdk_manager.active_account
+                    response = self.sdk_manager.sdk.get_order_results(the_account)
+
+                    if response.is_success:
+                        data = response.data
+
+                        for d in data:
+                            try:
+                                seq_no = str(d.seq_no)
+                                symbol = str(d.stock_no)
+                                status = int(d.status)
+
+                                with self.__on_going_orders_lock[symbol]:
+                                    if status != 10:
+                                        if seq_no in self.__on_going_orders[symbol]:
+                                            self.__on_going_orders[symbol].remove(seq_no)
+
+                                            self.logger.debug(
+                                                f"on_going_orders updated (order updater): {self.__on_going_orders}"
+                                            )
+                            except Exception as e:
+                                self.logger.debug(f"__order_status_updater error (inner loop) - {e}")
+                            finally:
+                                continue
+
+                    else:
+                        self.logger.debug(f"__order_status_updater retrieve order results failed, " +
+                                          f"message {response.message}")
+
+                except Exception as e:
+                    self.logger.debug(f"__order_status_updater error - {e}")
+                finally:
+                    time.sleep(1)
+                    continue
+
+            # sleep
+            time.sleep(1)
+
+            # Update the time
+            now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
     def __position_closure_executor(self):
         now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
@@ -114,43 +176,56 @@ class MyStrategy(Strategy):
                 clean_list = []
 
                 for symbol in self.__position_info.keys():
-                    # DayTrade 全部出場
-                    if int(self.__position_info[symbol]["size"]) >= 1000 and \
-                            (symbol not in self.__closure_order_placed.keys()):
-                        self.logger.info(f"{symbol} 全出場條件成立 ...")
+                    with self.__on_going_orders_lock[symbol]:
+                        # DayTrade 全部出場
+                        if int(self.__position_info[symbol]["size"]) >= 1000 and \
+                                (symbol not in self.__closure_order_placed.keys()) and \
+                                (len(self.__on_going_orders[symbol]) == 0):
+                            self.logger.info(f"{symbol} 全出場條件成立 ...")
 
-                        qty = self.__position_info[symbol]["size"]
+                            qty = self.__position_info[symbol]["size"]
 
-                        order = Order(
-                            buy_sell=BSAction.Buy,
-                            symbol=symbol,
-                            price=None,
-                            quantity=int(qty),
-                            market_type=MarketType.Common,
-                            price_type=PriceType.Market,
-                            time_in_force=TimeInForce.ROD,
-                            order_type=OrderType.Stock,
-                            user_def="hvl_closure",
-                        )
+                            order = Order(
+                                buy_sell=BSAction.Buy,
+                                symbol=symbol,
+                                price=None,
+                                quantity=int(qty),
+                                market_type=MarketType.Common,
+                                price_type=PriceType.Market,
+                                time_in_force=TimeInForce.ROD,
+                                order_type=OrderType.Stock,
+                                user_def="hvl_close",
+                            )
 
-                        response = self.sdk_manager.sdk.stock.place_order(
-                            self.sdk_manager.active_account,
-                            order,
-                            unblock=False,
-                        )
+                            response = self.sdk_manager.sdk.stock.place_order(
+                                self.sdk_manager.active_account,
+                                order,
+                                unblock=False,
+                            )
 
-                        if response.is_success:
-                            self.logger.info(f"{symbol} 全出場下單成功, size {qty}")
-                            self.__closure_order_placed[symbol] = True
+                            if response.is_success:
+                                self.logger.info(f"{symbol} 全出場下單成功, size {qty}")
+                                self.__closure_order_placed[symbol] = True
+
+                                # Update on_going_orders list
+                                if symbol in self.__on_going_orders:
+                                    self.__on_going_orders[symbol].append(response.data.seq_no)
+                                else:
+                                    self.__on_going_orders[symbol] = [response.data.seq_no]
+
+                                self.logger.debug(
+                                    f"on_going_orders updated (closure): {self.__on_going_orders}"
+                                )
+                            else:
+                                self.logger.warning(f"{symbol} 全出場下單失敗, size {qty}, msg: {response.message}")
+
                         else:
-                            self.logger.warning(f"{symbol} 全出場下單失敗, size {qty}, msg: {response.message}")
-
-                    else:
-                        self.logger.debug(f"(Closure session) symbol {symbol}")
-                        self.logger.debug(f"(Closure session) position info: {self.__position_info}")
-                        self.logger.debug(
-                            f"(Closure session) closure order placed keys: {self.__closure_order_placed.keys()}")
-                        clean_list.append(symbol)
+                            self.logger.debug(f"全出場條件成立\"未\"成立 ...")
+                            self.logger.debug(f"(Closure session) symbol {symbol}")
+                            self.logger.debug(f"(Closure session) position info: {self.__position_info}")
+                            self.logger.debug(
+                                f"(Closure session) closure order placed keys: {self.__closure_order_placed.keys()}")
+                            clean_list.append(symbol)
 
                 # Execute position info cleaning
                 for symbol in clean_list:
@@ -169,22 +244,23 @@ class MyStrategy(Strategy):
         # self.logger.debug(f"marketdata: {data}")
         try:
             symbol = data["symbol"]
-            timestamp = int(data["time"])
+            # timestamp = int(data["time"])
             mid_price = (data["bid"] + data["ask"]) / 2
             is_continuous = True if "isContinuous" in data.keys() else False
 
-            if is_continuous and \
-                    (symbol not in self.__latest_timestamp.keys() or timestamp > self.__latest_timestamp[symbol]):
+            if is_continuous:  #and \
+                # (symbol not in self.__latest_timestamp.keys() or timestamp > self.__latest_timestamp[symbol]):
 
-                with self.__locks[symbol]:
-                    self.__latest_timestamp[symbol] = timestamp
+                # with self.__locks[symbol]:
+                #     self.__latest_timestamp[symbol] = timestamp
 
-                    # Start trading logic =============
+                # Start trading logic =============
+                with self.__on_going_orders_lock[symbol]:
                     now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
                     # 開盤動作
                     if now_time < datetime.time(9, 15) and \
-                            (symbol not in self.__open_order_placed.keys()):
+                            symbol not in self.__open_order_placed.keys():
                         price_change_pct = \
                             100 * (mid_price - self.__lastday_close[symbol]) / self.__lastday_close[symbol]
 
@@ -218,9 +294,20 @@ class MyStrategy(Strategy):
 
                                 self.logger.info(f"{symbol} 進場下單成功, 進場張數 {self.__open_order_placed[symbol]}")
 
+                                # Update on_going_orders list
+                                if symbol in self.__on_going_orders:
+                                    self.__on_going_orders[symbol].append(response.data.seq_no)
+                                else:
+                                    self.__on_going_orders[symbol] = [response.data.seq_no]
+
+                                self.logger.debug(
+                                    f"on_going_orders updated (enter): {self.__on_going_orders}"
+                                )
+
                     # 停損停利出場
                     if now_time < datetime.time(13, 20) and \
-                            symbol in self.__position_info.keys():
+                            symbol in self.__position_info.keys() and \
+                            len(self.__on_going_orders[symbol]) == 0:
                         info = self.__position_info[symbol]
                         sell_price = info["price"]
 
@@ -250,6 +337,16 @@ class MyStrategy(Strategy):
                             if response.is_success:
                                 self.logger.info(f"{symbol} 停損/停利下單成功")
 
+                                # Update on_going_orders list
+                                if symbol in self.__on_going_orders:
+                                    self.__on_going_orders[symbol].append(response.data.seq_no)
+                                else:
+                                    self.__on_going_orders[symbol] = [response.data.seq_no]
+
+                                self.logger.debug(
+                                    f"on_going_orders updated (stop): {self.__on_going_orders}"
+                                )
+
         except Exception as e:
             self.logger.error(f"__realtime_price_data_processor, error: {e}")
             self.logger.debug(f"\ttraceback:\n{traceback.format_exc()}")
@@ -259,6 +356,7 @@ class MyStrategy(Strategy):
 
         if filled_data is not None:
             user_def = str(filled_data.user_def)
+            seq_no = str(filled_data.seq_no)
             symbol = str(filled_data.stock_no)
             account_no = str(filled_data.account)
             filled_qty = int(filled_data.filled_qty)
@@ -267,45 +365,54 @@ class MyStrategy(Strategy):
             target_account_no = str(self.sdk_manager.active_account.account)
 
             if account_no == target_account_no:
-                if user_def == "hvl_enter":
-                    if symbol not in self.__position_info:
-                        self.__position_info[symbol] = {
-                            "price": filled_price,
-                            "size": filled_qty
-                        }
-
-                    else:
-                        original_price = self.__position_info[symbol]["price"]
-                        original_size = self.__position_info[symbol]["size"]
-
-                        new_size = original_size + filled_qty
-                        new_price = (original_price * original_size + filled_price * filled_qty) / new_size
-
-                        self.__position_info[symbol] = {
-                            "price": new_price,
-                            "size": new_size
-                        }
-
-                    self.logger.debug(f"position_info updated (enter): {self.__position_info}")
-
-                elif user_def in ["hvl_stop", "hvl_closure"]:
-                    if symbol not in self.__position_info:
-                        self.logger.debug(f"Symbol {symbol} is not in self.__position_info")
-
-                    else:
-                        original_size = self.__position_info[symbol]["size"]
-
-                        if filled_qty >= original_size:  # Position closed
-                            # Remove position info for the symbol
-                            del self.__position_info[symbol]
-
-                            # Unsubscribe realtime market data
-                            self.sdk_manager.unsubscribe_realtime_trades(symbol)
+                with self.__on_going_orders_lock[symbol]:
+                    if user_def == "hvl_enter":
+                        if symbol not in self.__position_info:
+                            self.__position_info[symbol] = {
+                                "price": filled_price,
+                                "size": filled_qty
+                            }
 
                         else:
-                            self.__position_info[symbol]["size"] = original_size - filled_qty
+                            original_price = self.__position_info[symbol]["price"]
+                            original_size = self.__position_info[symbol]["size"]
 
-                        self.logger.debug(f"position_info updated (stop/closure): {self.__position_info}")
+                            new_size = original_size + filled_qty
+                            new_price = (original_price * original_size + filled_price * filled_qty) / new_size
+
+                            self.__position_info[symbol] = {
+                                "price": new_price,
+                                "size": new_size
+                            }
+
+                        self.logger.debug(f"position_info updated (enter): {self.__position_info}")
+
+                    elif user_def in ["hvl_stop", "hvl_close"]:
+                        if symbol not in self.__position_info:
+                            self.logger.debug(f"Symbol {symbol} is not in self.__position_info")
+
+                        else:
+                            original_size = self.__position_info[symbol]["size"]
+
+                            if filled_qty >= original_size:  # Position closed
+                                # Remove position info for the symbol
+                                del self.__position_info[symbol]
+
+                                # Unsubscribe realtime market data
+                                self.sdk_manager.unsubscribe_realtime_trades(symbol)
+
+                            else:
+                                self.__position_info[symbol]["size"] = original_size - filled_qty
+
+                            self.logger.debug(f"position_info updated (stop/closure): {self.__position_info}")
+
+                    # Update on_going_orders
+                    if seq_no in self.__on_going_orders[symbol]:
+                        self.__on_going_orders[symbol].remove(seq_no)
+
+                    self.logger.debug(
+                        f"on_going_orders updated (filled data): {self.__on_going_orders}"
+                    )
 
         else:
             self.logger.error(f"Filled order error event: code {code}, filled_data {filled_data}")
@@ -335,4 +442,5 @@ if __name__ == '__main__':
     print("Ending session ...")
     time.sleep(20)
     sdk_manager.terminate()
-    input("program ended, press any key to exit ... ")
+    print("program ended, press any key to exit ... ")
+    input()
