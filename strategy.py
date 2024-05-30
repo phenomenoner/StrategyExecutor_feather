@@ -88,7 +88,7 @@ class MyStrategy(Strategy):
         self.__position_info = {}
         self.__closure_order_placed = {}
 
-        self.__on_going_orders = {}  # {symbol -> [seq_no]}
+        self.__on_going_orders = {}  # {symbol -> [order_no]}
         self.__on_going_orders_lock = {}
         for s in self.__symbols:
             self.__on_going_orders[s] = []
@@ -143,14 +143,14 @@ class MyStrategy(Strategy):
 
                         for d in data:
                             try:
-                                seq_no = str(d.seq_no)
+                                order_no = str(d.order_no)
                                 symbol = str(d.stock_no)
                                 status = int(d.status)
 
                                 with self.__on_going_orders_lock[symbol]:
                                     if status != 10:
-                                        if seq_no in self.__on_going_orders[symbol]:
-                                            self.__on_going_orders[symbol].remove(seq_no)
+                                        if order_no in self.__on_going_orders[symbol]:
+                                            self.__on_going_orders[symbol].remove(order_no)
 
                                             self.logger.debug(
                                                 f"on_going_orders updated (order updater): {self.__on_going_orders}"
@@ -217,9 +217,9 @@ class MyStrategy(Strategy):
 
                                 # Update on_going_orders list
                                 if symbol in self.__on_going_orders:
-                                    self.__on_going_orders[symbol].append(response.data.seq_no)
+                                    self.__on_going_orders[symbol].append(response.data.order_no)
                                 else:
-                                    self.__on_going_orders[symbol] = [response.data.seq_no]
+                                    self.__on_going_orders[symbol] = [response.data.order_no]
 
                                 self.logger.debug(
                                     f"on_going_orders updated (closure): {self.__on_going_orders}"
@@ -306,9 +306,9 @@ class MyStrategy(Strategy):
 
                                 # Update on_going_orders list
                                 if symbol in self.__on_going_orders:
-                                    self.__on_going_orders[symbol].append(response.data.seq_no)
+                                    self.__on_going_orders[symbol].append(response.data.order_no)
                                 else:
-                                    self.__on_going_orders[symbol] = [response.data.seq_no]
+                                    self.__on_going_orders[symbol] = [response.data.order_no]
 
                                 self.logger.debug(
                                     f"on_going_orders updated (enter): {self.__on_going_orders}"
@@ -351,9 +351,9 @@ class MyStrategy(Strategy):
 
                                 # Update on_going_orders list
                                 if symbol in self.__on_going_orders:
-                                    self.__on_going_orders[symbol].append(response.data.seq_no)
+                                    self.__on_going_orders[symbol].append(response.data.order_no)
                                 else:
-                                    self.__on_going_orders[symbol] = [response.data.seq_no]
+                                    self.__on_going_orders[symbol] = [response.data.order_no]
 
                                 self.logger.debug(
                                     f"on_going_orders updated (stop): {self.__on_going_orders}"
@@ -369,7 +369,8 @@ class MyStrategy(Strategy):
 
         if filled_data is not None:
             user_def = str(filled_data.user_def)
-            seq_no = str(filled_data.seq_no)
+            # seq_no = str(filled_data.seq_no)
+            order_no = str(filled_data.order_no)
             symbol = str(filled_data.stock_no)
             account_no = str(filled_data.account)
             filled_qty = int(filled_data.filled_qty)
@@ -420,8 +421,8 @@ class MyStrategy(Strategy):
                             self.logger.debug(f"position_info updated (stop/closure): {self.__position_info}")
 
                     # Update on_going_orders
-                    if seq_no in self.__on_going_orders[symbol]:
-                        self.__on_going_orders[symbol].remove(seq_no)
+                    if order_no in self.__on_going_orders[symbol]:
+                        self.__on_going_orders[symbol].remove(order_no)
 
                     self.logger.debug(
                         f"on_going_orders updated (filled data): {self.__on_going_orders}"
