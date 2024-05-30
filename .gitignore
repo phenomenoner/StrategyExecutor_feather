@@ -1,6 +1,7 @@
 /.*
 /.*/
 /log/
-/StrategyExecutor_feather.zip
+*.zip
+/*.zip
 .*
 .*/
