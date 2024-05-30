@@ -8,6 +8,7 @@ import datetime
 import functools
 import json
 from zoneinfo import ZoneInfo
+from typing import Optional
 import fubon_neo
 from fubon_neo.sdk import FubonSDK
 
@@ -28,9 +29,9 @@ def check_sdk(func):
 
 
 class SDKManager:
-    __version__ = "2024.0.3"
+    __version__ = "2024.0.5"
 
-    def __init__(self, max_marketdata_ws_connect=2, thread_pool_workers=12, logger=None, log_level=logging.DEBUG):
+    def __init__(self, max_marketdata_ws_connect=1, thread_pool_workers=12, logger=None, log_level=logging.DEBUG):
         # Set logger
         if logger is None:
             utils.mk_folder("log")
@@ -49,7 +50,7 @@ class SDKManager:
         self.__active_account_no = None
 
         # SDK and account info
-        self.sdk = None
+        self.sdk: Optional[FubonSDK] = None
         self.accounts = None
         self.active_account = None
         self.trade_ws_on_event = lambda code, msg: self.__logger.debug(f"Trade ws event: code {code}, msg {msg}")

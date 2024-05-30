@@ -5,6 +5,7 @@ import logging
 import utils
 import datetime
 import traceback
+from typing import Optional
 from abc import ABC, abstractmethod
 from zoneinfo import ZoneInfo
 from sdk_manager_async import SDKManager, check_sdk
@@ -17,6 +18,7 @@ class Strategy(ABC):
     """
     Strategy template class
     """
+    __version__ = "2024.0.5"
 
     def __init__(self, logger=None, log_level=logging.DEBUG):
         # Set logger
@@ -29,7 +31,7 @@ class Strategy(ABC):
         self.logger = logger
 
         # The sdk_manager
-        self.sdk_manager = None
+        self.sdk_manager: Optional[SDKManager] = None
 
         # Coordination
         # self.__is_strategy_run = False
@@ -48,7 +50,7 @@ class Strategy(ABC):
          Add a realtime trade data websocket channel
         :param symbol: stock symbol (e.g., "2881")
         """
-        pass
+        self.sdk_manager.subscribe_realtime_trades(symbol)
 
     @check_sdk
     def remove_realtime_marketdata(self, symbol: str):
@@ -56,7 +58,7 @@ class Strategy(ABC):
         Remove a realtime market data websocket channel
         :param symbol: stock symbol (e.g., "2881")
         """
-        pass
+        self.sdk_manager.unsubscribe_realtime_trades(symbol)
 
     @abstractmethod
     @check_sdk
@@ -72,7 +74,7 @@ class MyStrategy(Strategy):
         super().__init__(logger=logger, log_level=log_level)
 
         # Setup target symbols
-        self.__symbols = ["3605"]
+        self.__symbols = ["6509", "6219", "5210", "6834"]
         # self.__latest_timestamp = {}
         # self.__locks = {}
         # for s in self.__symbols:
@@ -97,6 +99,8 @@ class MyStrategy(Strategy):
         # Get stock's last day close price
         rest_stock = self.sdk_manager.sdk.marketdata.rest_client.stock
 
+        self.logger.debug("Strategy.run - Getting stock close price of the last trading day ...")
+
         for s in self.__symbols:
             response = rest_stock.intraday.quote(symbol=s)
             self.__lastday_close[s] = float(response["previousClose"])
@@ -106,10 +110,14 @@ class MyStrategy(Strategy):
         self.sdk_manager.set_trade_handle_func("on_filled", self.__order_filled_processor)
         self.sdk_manager.set_ws_handle_func("message", self.__realtime_price_data_processor)  # Marketdata
 
+        self.logger.debug("Strategy.run - Subscribing realtime market datafeed ...")
+
         # Subscribe realtime marketdata
         for symbol in self.__symbols:
             self.sdk_manager.subscribe_realtime_trades(symbol)
             time.sleep(0.1)
+
+        self.logger.debug("Strategy.run - Market data preparation has completed.")
 
         # Start position closure and order update agents
         t = threading.Thread(target=self.__order_status_updater)
@@ -128,7 +136,7 @@ class MyStrategy(Strategy):
                 # Get order results
                 try:
                     the_account = self.sdk_manager.active_account
-                    response = self.sdk_manager.sdk.get_order_results(the_account)
+                    response = self.sdk_manager.sdk.stock.get_order_results(the_account)
 
                     if response.is_success:
                         data = response.data
@@ -245,7 +253,7 @@ class MyStrategy(Strategy):
         try:
             symbol = data["symbol"]
             # timestamp = int(data["time"])
-            mid_price = (data["bid"] + data["ask"]) / 2
+            #mid_price = (data["bid"] + data["ask"]) / 2
             is_continuous = True if "isContinuous" in data.keys() else False
 
             if is_continuous:  #and \
@@ -259,12 +267,14 @@ class MyStrategy(Strategy):
                     now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
                     # 開盤動作
-                    if now_time < datetime.time(9, 15) and \
+                    if now_time < datetime.time(9, 30) and \
                             symbol not in self.__open_order_placed.keys():
-                        price_change_pct = \
-                            100 * (mid_price - self.__lastday_close[symbol]) / self.__lastday_close[symbol]
+                        price_change_pct_bid = \
+                            100 * (float(data["bid"]) - self.__lastday_close[symbol]) / self.__lastday_close[symbol]                    
+                        # price_change_pct_ask = \
+                        #     100 * (float(data["ask"])- self.__lastday_close[symbol]) / self.__lastday_close[symbol]
 
-                        if 1 < price_change_pct < 6:
+                        if 1 < price_change_pct_bid < 6:
                             self.logger.info(f"{symbol} 進場條件成立 ...")
 
                             order = Order(
@@ -282,7 +292,7 @@ class MyStrategy(Strategy):
                             response = self.sdk_manager.sdk.stock.place_order(
                                 self.sdk_manager.active_account,
                                 order,
-                                unblock=True,
+                                unblock=False,
                             )
 
                             if response.is_success:
@@ -311,7 +321,9 @@ class MyStrategy(Strategy):
                         info = self.__position_info[symbol]
                         sell_price = info["price"]
 
-                        current_pnl_pct = 100 * (sell_price - mid_price) / mid_price
+                        ask_price = float(data["ask"])
+                        current_pnl_pct = 100 * (sell_price - ask_price) / ask_price
+                        # current_pnl_pct = 100 * (sell_price - mid_price) / mid_price
 
                         if current_pnl_pct >= 6 or current_pnl_pct <= -2:
                             self.logger.info(f"{symbol} 停損/停利條件成立 ...")
@@ -331,7 +343,7 @@ class MyStrategy(Strategy):
                             response = self.sdk_manager.sdk.stock.place_order(
                                 self.sdk_manager.active_account,
                                 order,
-                                unblock=True,
+                                unblock=False,
                             )
 
                             if response.is_success:
@@ -350,6 +362,7 @@ class MyStrategy(Strategy):
         except Exception as e:
             self.logger.error(f"__realtime_price_data_processor, error: {e}")
             self.logger.debug(f"\ttraceback:\n{traceback.format_exc()}")
+            self.logger.debug(f"\treceived data: {data}")
 
     def __order_filled_processor(self, code, filled_data):
         self.logger.debug(f"__order_filled_processor: code {code}, filled_data\n{filled_data}")
