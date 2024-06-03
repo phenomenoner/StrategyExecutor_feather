@@ -3,6 +3,12 @@
 
 ```Disclaimer: 本文僅供教學與參考之用，實務交易應自行評估並承擔相關風險```
 
+## 參考連結
+富邦新一代API Python SDK載點及開發說明文件
+* [新一代API SDK 載點](https://www.fbs.com.tw/TradeAPI/docs/download/download-sdk)<br>
+* [新一代API 開發說明文件](https://www.fbs.com.tw/TradeAPI/docs/trading/introduction)<br>
+* [新一代API 社群討論](https://discord.com/invite/VHjjc4C)<br>
+
 ## 功能特色
 * SDK總管 ``sdk_manager_async.py``
     * 自動斷線重連 (包含交易連線及行情連線)
