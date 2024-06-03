@@ -1,6 +1,5 @@
 import logging
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import threading
 import time
 import utils
@@ -31,7 +30,7 @@ def check_sdk(func):
 class SDKManager:
     __version__ = "2024.0.5"
 
-    def __init__(self, max_marketdata_ws_connect=1, thread_pool_workers=12, logger=None, log_level=logging.DEBUG):
+    def __init__(self, max_marketdata_ws_connect=1, logger=None, log_level=logging.DEBUG):
         # Set logger
         if logger is None:
             utils.mk_folder("log")
@@ -98,10 +97,6 @@ class SDKManager:
 
         self.__async_lock_by_symbol = {}  # {symbol -> the lock}
         self.__latest_timestamp = {}
-
-        # workers = max(int(thread_pool_workers), 1)
-        # self.__async_threadpool_executor = ThreadPoolExecutor(workers)
-        # self.__logger.info(f"async threadpool worker setting: {workers}")
 
     """
         Auxiliary Functions
@@ -500,16 +495,10 @@ class SDKManager:
     def set_ws_handle_func(self, func_name, func):
         """
         Set callback function to websocket marketdata
-        :param func_name: "connect", "disconnect", "error", or "message"
+        :param func_name: "message"
         :param func: The corresponding callback function
         """
         match func_name:
-            # case "connect":
-            #     self.on_connect_callback = func
-            # case "disconnect":
-            #     self.on_disconnect_callback = func
-            # case "error":
-            #     self.on_error_callback = func
             case "message":
                 self.on_message_callback = func
             case _:
@@ -527,12 +516,10 @@ class SDKManager:
     def set_trade_handle_func(self, func_name, func):
         """
         Set sdk trade callback function
-        :param func_name: "on_event", "on_order", "on_order_changed", or "on_filled"
+        :param func_name: "on_order", "on_order_changed", or "on_filled"
         :param func: The corresponding callback function
         """
         match func_name:
-            # case "on_event":
-            #     self.trade_ws_on_event = func
             case "on_order":
                 self.trade_ws_on_order = func
             case "on_order_changed":
@@ -603,8 +590,6 @@ class SDKManager:
                     self.__logger.error(f"__ws_on_message_handler error: {e}, msg = {message}")
 
     async def __ws_on_message_handler_task(self, message: dict):
-        # self.__logger.debug(f"marketdata message: {message}")
-
         try:
             if message["event"] == "data":
                 data = message["data"]
@@ -618,26 +603,5 @@ class SDKManager:
                             self.__latest_timestamp[symbol] = timestamp
                             self.on_message_callback(message["data"])
 
-                    # await self.event_loop.run_in_executor(
-                    #     self.async_threadpool_executor,
-                    #     self.on_message_callback,
-                    #     message
-                    # )
-
         except Exception as e:
             self.__logger.error(f"__ws_on_message_handler_task error: error - {e}, message - {message}")
-
-    # def __trade_event_handler(self, code, message):
-    #     self.__handle_trade_ws_event(code, message)
-    #
-    #     if self.trade_ws_on_event is not None:
-    #         self.event_loop.create_task(
-    #             self.__trade_event_handler_task(code, message)
-    #         )
-
-    # async def __trade_event_handler_task(self, code, message):
-    #     await self.event_loop.run_in_executor(
-    #         self.async_threadpool_executor,
-    #         self.trade_ws_on_event,
-    #         code, message
-    #     )
