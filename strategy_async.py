@@ -86,9 +86,11 @@ class TradingHeroAlpha(Strategy):
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
-    @staticmethod
-    def position_algo(previous_close):
-        return min(5, max(round(2 * (80 / previous_close)), 1))
+    def position_algo(self, previous_close: float) -> int:
+        if self.__strategy_code__ == "cdl":
+            return min(5, max(round(2 * (80 / previous_close)), 1))
+        else:
+            return min(5, max(round(2 * (120 / previous_close)), 1))
 
     def __init__(self, the_queue: multiprocessing.Queue, logger=None, log_level=logging.DEBUG):
         super().__init__(logger=logger, log_level=log_level)
@@ -154,7 +156,7 @@ class TradingHeroAlpha(Strategy):
         self.__fund_available = 420000  # 總下單額度控管
         # self.__enter_lot_limit = 3  # 單一商品總下單張數上限
         self.__enter_lot_limit: dict[str, int] = {}
-        self.__max_lot_per_round = 1 #min(2, self.__enter_lot_limit)  # Maximum number of round to send order non-stoping
+        self.__max_lot_per_round = 2 # min(2, self.__enter_lot_limit)  # Maximum number of round to send order non-stopping
         self.__fund_available_update_lock = asyncio.Lock()
         self.__active_target_list = []
         self.logger.info(f"初始可用額度: {self.__fund_available} TWD")
@@ -163,7 +165,7 @@ class TradingHeroAlpha(Strategy):
         # Strategy checkpoint
         minute_digit_offset = [-2, -1, 0, 1, 2]
         second_digit_offset = [*range(-25, 26, 1)]
-        self.__strategy_exit_time = datetime.time(13, int(16 + random.choice(minute_digit_offset)),
+        self.__strategy_exit_time = datetime.time(13, int(18 + random.choice(minute_digit_offset)),
                                                   int(30 + random.choice(second_digit_offset)))
         self.__strategy_enter_cutoff_time = datetime.time(9, 45)
         self.__market_close_time = datetime.time(13, 32)
@@ -502,7 +504,7 @@ class TradingHeroAlpha(Strategy):
             # Update the time
             now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
-    async def __position_closure_executor_symbol(self, symbol):
+    async def __position_closure_executor_symbol(self, symbol: str):
         try:
             async with self.__on_going_orders_lock[symbol]:
                 # DayTrade 全部出場
@@ -1021,10 +1023,10 @@ class TradingHeroAlpha(Strategy):
                 ask_price = float(data["ask"]) if ("ask" in data and float(data["ask"]) > 0) else float(
                     data["price"])  # Add if for robustness
 
-                is_early_session = now_time <= datetime.time(9, 30)
                 current_pnl_pct = 100 * (sell_price - ask_price) / ask_price
                 gap_until_now_pct = 100 * (ask_price - self.__lastday_close[symbol]) / self.__lastday_close[
                     symbol]
+                # is_early_session = now_time <= datetime.time(9, 30)
 
                 # if (self.__trail_stop_profit_cutoff[symbol] < 0) and (current_pnl_pct >= 3.5):
                 #     # Set the cutoff to the current_pnl_pct
