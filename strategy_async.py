@@ -54,7 +54,7 @@ class Strategy(ABC):
 
     def set_sdk_manager(self, sdk_manager: SDKManager):
         self.sdk_manager = sdk_manager
-        self.logger.info(f"The SDKManager version: {self.sdk_manager.__version__}")
+        # self.logger.info(f"The SDKManager version: {self.sdk_manager.__version__}")
 
     @check_sdk
     def add_realtime_marketdata(self, symbol: str):
@@ -82,16 +82,26 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.12.9"
+    __version__ = "2024.13.1"
+    __strategy_code__ = "cdl"
+    __zeta__ = 8.6
+
+    @staticmethod
+    def position_algo(previous_close):
+        return min(5, max(round(2 * (80 / previous_close)), 1))
 
     def __init__(self, the_queue: multiprocessing.Queue, logger=None, log_level=logging.DEBUG):
         super().__init__(logger=logger, log_level=log_level)
+
+        # Info
+        self.logger.info(f"Strategy version: {self.__version__}")
+        self.logger.info(f"Is cdl? {self.__strategy_code__ == "cdl"}")
 
         # Multiprocessing queue
         self.queue: multiprocessing.Queue = the_queue
 
         # Setup target symbols
-        self.__symbols = ['0000']  # 輸入股票代碼
+        self.__symbols = ['00887', '6598', '3710', '6651', '3540', '6754', '3592', '4105', '6456', '6591', '3325', '6261', '3563', '3694', '4939', '4129', '3083', '6573', '8183', '8155']  # 輸入股票代碼
 
         self.__symbols_task_done = []
 
@@ -142,12 +152,13 @@ class TradingHeroAlpha(Strategy):
 
         # Position sizing
         self.__fund_available = 420000  # 總下單額度控管
-        self.__enter_lot_limit = 3  # 單一商品總下單張數上限
-        self.__max_lot_per_round = min(2, self.__enter_lot_limit)  # Maximum number of round to send order non-stoping
+        # self.__enter_lot_limit = 3  # 單一商品總下單張數上限
+        self.__enter_lot_limit: dict[str, int] = {}
+        self.__max_lot_per_round = 1 #min(2, self.__enter_lot_limit)  # Maximum number of round to send order non-stoping
         self.__fund_available_update_lock = asyncio.Lock()
         self.__active_target_list = []
         self.logger.info(f"初始可用額度: {self.__fund_available} TWD")
-        self.logger.info(f"個股下單上限: {self.__enter_lot_limit} 張")
+        #self.logger.info(f"個股下單上限: {self.__enter_lot_limit} 張")
 
         # Strategy checkpoint
         minute_digit_offset = [-2, -1, 0, 1, 2]
@@ -264,42 +275,6 @@ class TradingHeroAlpha(Strategy):
         # Start the heartbeat
         heartbeat_task = self.__event_loop.create_task(self.__heartbeat_task())
 
-        # Get stock's last day close price
-        rest_stock = self.sdk_manager.sdk.marketdata.rest_client.stock
-
-        self.logger.info("Strategy.run - Getting stock close price of the last trading day ...")
-        for s in self.__symbols:
-            try:
-                is_task_success = False
-                response = {}
-
-                while not is_task_success:
-                    response = rest_stock.intraday.quote(symbol=s)
-                    if "status" in response and "429" in response:
-                        self.logger.info(f"statusCode 429, wait and try again ...")
-                        await asyncio.sleep(60)
-                    elif datetime.datetime.strptime(response["date"], "%Y-%m-%d").date() != \
-                            datetime.datetime.now(ZoneInfo("Asia/Taipei")).date():
-                        self.logger.info(f"Date {response["date"]} is not today, wait and try again ...")
-                        # self.logger.debug(f"data:\n{response}")
-                        await asyncio.sleep(60)
-                    else:
-                        is_task_success = True
-
-                self.__lastday_close[s] = float(response["previousClose"])
-                self.logger.debug(f"symbol: {s}, previous_close: {self.__lastday_close[s]}")
-
-            except Exception as er:
-                self.logger.error(f"{s} get the last day close error: {er}, traceback\n{traceback.format_exc()}")
-                self.__lastday_close[s] = 9999999999
-
-            await asyncio.sleep(0.1)
-
-        # Set callback functions
-        self.logger.debug("Strategy.run - Set callback functions ...")
-        self.sdk_manager.set_trade_handle_func("on_filled", self.__order_filled_processor)
-        self.sdk_manager.set_ws_handle_func("message", self.__price_data_callback)
-
         # Remove symbols that can do day-trade short sell
         self.logger.debug("Strategy.run - Cleaning symbol list ...")
 
@@ -351,6 +326,47 @@ class TradingHeroAlpha(Strategy):
         else:
             self.logger.debug(
                 f"SDK version is less than 1.3.1, current {self.sdk_manager.sdk_version}, ignore symbol cleaning ...")
+
+        # Get stock's last day close price
+        rest_stock = self.sdk_manager.sdk.marketdata.rest_client.stock
+
+        self.logger.info("Strategy.run - Getting stock close price of the last trading day ...")
+        for s in self.__symbols:
+            try:
+                is_task_success = False
+                response = {}
+
+                while not is_task_success:
+                    response = rest_stock.intraday.quote(symbol=s)
+                    if "status" in response and "429" in response:
+                        self.logger.info(f"statusCode 429, wait and try again ...")
+                        await asyncio.sleep(60)
+                    elif datetime.datetime.strptime(response["date"], "%Y-%m-%d").date() != \
+                            datetime.datetime.now(ZoneInfo("Asia/Taipei")).date():
+                        self.logger.info(f"Date {response["date"]} is not today, wait and try again ...")
+                        # self.logger.debug(f"data:\n{response}")
+                        await asyncio.sleep(60)
+                    else:
+                        is_task_success = True
+
+                self.__lastday_close[s] = float(response["previousClose"])
+                self.logger.debug(f"symbol: {s}, previous_close: {self.__lastday_close[s]}")
+
+            except Exception as er:
+                self.logger.error(f"{s} get the last day close error: {er}, traceback\n{traceback.format_exc()}")
+                self.__lastday_close[s] = 9999999999
+
+            await asyncio.sleep(0.1)
+
+        # Calculate lot limit
+        for symbol in self.__symbols:
+            self.__enter_lot_limit[symbol] = self.position_algo(self.__lastday_close[symbol])
+            self.logger.debug(f"Symbol {symbol}'s lot limit: {self.__enter_lot_limit[symbol]}")
+
+        # Set callback functions
+        self.logger.debug("Strategy.run - Set callback functions ...")
+        self.sdk_manager.set_trade_handle_func("on_filled", self.__order_filled_processor)
+        self.sdk_manager.set_ws_handle_func("message", self.__price_data_callback)
 
         self.logger.info("Strategy.run - Initialize price data queue and processing tasks per symbol ...")
 
@@ -639,7 +655,7 @@ class TradingHeroAlpha(Strategy):
     def __price_data_callback(self, data):
         def add_item(my_list, new_item):
             my_list.append(new_item)
-            if len(my_list) > 5:
+            if len(my_list) > 20:
                 my_list.pop(0)
 
         try:
@@ -665,7 +681,7 @@ class TradingHeroAlpha(Strategy):
                     add_item(self.__past_prices_seen[symbol], baseline_price)
 
                     # Update the average price
-                    if len(self.__past_prices_seen[symbol]) >= 3:
+                    if len(self.__past_prices_seen[symbol]) >= 1:
                         self.__average_price[symbol] = \
                             numpy.mean(self.__past_prices_seen[symbol])
 
@@ -684,7 +700,8 @@ class TradingHeroAlpha(Strategy):
                             data["price"])  # Add if for robustness
                         gap_until_now_pct = 100 * (ask_price - self.__lastday_close[symbol]) / self.__lastday_close[
                             symbol]
-                        stop_condition_zeta = (gap_until_now_pct >= 8)
+                        stop_condition_zeta = (gap_until_now_pct > self.__zeta__)
+                        self.logger.debug(f"Zeta! ({symbol}:{gap_until_now_pct:.3f} %): {data}")
 
                     if self.__is_reload:
                         pass_data_flag = stop_condition_zeta or (not self.__on_going_orders_lock[symbol].locked())
@@ -748,6 +765,13 @@ class TradingHeroAlpha(Strategy):
                 self.logger.error(f"exit_order_success_routine failed! Exception: {er}, " +
                                   f"traceback: {traceback.format_exc()}")
 
+        def is_sweet_range(change_pct: float) -> bool:
+            if self.__strategy_code__ == "cdl":
+                return 1 < change_pct < 5
+            else:
+                return -5 < change_pct < 5
+
+
         # ########################
         #        Main body
         # ########################
@@ -775,7 +799,7 @@ class TradingHeroAlpha(Strategy):
                 gap_change_pct = 100 * (self.__open_price_today[symbol] - self.__lastday_close[symbol]) \
                                  / self.__lastday_close[symbol]
 
-                if (gap_change_pct <= 1) or (gap_change_pct >= 7):  # Do not trade this target today
+                if not is_sweet_range(gap_change_pct):  # Do not trade this target today
                     self.logger.info(f"{symbol} 開盤漲幅超過區間 (實際漲幅: {gap_change_pct:.2f} %)，移除標的" +
                                      f"lastday_close: {self.__lastday_close[symbol]}, " +
                                       f"open_price_today: {self.__open_price_today[symbol]}")
@@ -809,7 +833,7 @@ class TradingHeroAlpha(Strategy):
                     (not self.__is_reload) and \
                     (symbol not in self.__suspend_entering_symbols) and \
                     (symbol not in self.__open_order_placed or
-                     self.__open_order_placed[symbol] < self.__enter_lot_limit):
+                     self.__open_order_placed[symbol] < self.__enter_lot_limit[symbol]):
 
                 if symbol not in self.__active_target_list:
                     self.logger.info(f"{symbol} 尚未納入進場列表: {self.__active_target_list}")
@@ -838,9 +862,14 @@ class TradingHeroAlpha(Strategy):
                     pre_allocate_fund = 0
                     fund_lock_checkpoint_start = fund_lock_checkpoint_end = 0  # init the timer variables
 
-                    if (1 < price_change_pct_bid < 7) and \
-                            (baseline_price < self.__max_price_seen[symbol]) and \
-                            (baseline_price < self.__average_price[symbol]):
+                    if is_sweet_range(price_change_pct_bid) and \
+                            (
+                                    (
+                                            (baseline_price < self.__max_price_seen[symbol]) and
+                                            (baseline_price < self.__average_price[symbol])
+                                    ) or
+                                    is_open
+                            ):
                         fund_lock_checkpoint_start = time.time()
                         async with self.__fund_available_update_lock:
                             fund_lock_checkpoint_end = time.time()
@@ -855,7 +884,7 @@ class TradingHeroAlpha(Strategy):
                                 pass
 
                             else:
-                                quantity_to_bid = int(self.__enter_lot_limit * 1000)
+                                quantity_to_bid = int(self.__enter_lot_limit[symbol] * 1000)
                                 if symbol in self.__open_order_placed:
                                     quantity_to_bid -= self.__open_order_placed[symbol] * 1000
 
@@ -997,20 +1026,24 @@ class TradingHeroAlpha(Strategy):
                 gap_until_now_pct = 100 * (ask_price - self.__lastday_close[symbol]) / self.__lastday_close[
                     symbol]
 
-                if (self.__trail_stop_profit_cutoff[symbol] < 0) and (current_pnl_pct >= 3.5):
-                    # Set the cutoff to the current_pnl_pct
-                    self.__trail_stop_profit_cutoff[symbol] = current_pnl_pct - 0.5
-                elif (self.__trail_stop_profit_cutoff[symbol] > 0) and \
-                        (current_pnl_pct - self.__trail_stop_profit_cutoff[symbol] >= 1):
-                    # Rise the cutoff
-                    self.__trail_stop_profit_cutoff[symbol] = current_pnl_pct - 0.5
+                # if (self.__trail_stop_profit_cutoff[symbol] < 0) and (current_pnl_pct >= 3.5):
+                #     # Set the cutoff to the current_pnl_pct
+                #     self.__trail_stop_profit_cutoff[symbol] = current_pnl_pct - 0.5
+                # elif (self.__trail_stop_profit_cutoff[symbol] > 0) and \
+                #         (current_pnl_pct - self.__trail_stop_profit_cutoff[symbol] >= 1):
+                #     # Rise the cutoff
+                #     self.__trail_stop_profit_cutoff[symbol] = current_pnl_pct - 0.5
 
-                stop_condition_1 = is_early_session and (current_pnl_pct <= -5)
-                # ((current_pnl_pct >= 8) or (current_pnl_pct <= -5))
-                stop_condition_2 = (not is_early_session) and (current_pnl_pct <= -3)
-                # ((current_pnl_pct >= 6) or (current_pnl_pct <= -3))
-                stop_condition_zeta = (gap_until_now_pct >= 8)
-                stop_condition_alpha = current_pnl_pct < self.__trail_stop_profit_cutoff[symbol]
+                # stop_condition_1 = is_early_session and (current_pnl_pct <= -5)
+                # stop_condition_2 = (not is_early_session) and (current_pnl_pct <= -3)
+                # stop_condition_alpha = current_pnl_pct < self.__trail_stop_profit_cutoff[symbol]
+                if self.__strategy_code__ == "cdl":
+                    stop_condition_1 = current_pnl_pct < -3.5
+                    stop_condition_2 = stop_condition_alpha = False
+                else:
+                    stop_condition_1 = stop_condition_2 = stop_condition_alpha = False
+
+                stop_condition_zeta = (gap_until_now_pct > self.__zeta__)
 
                 if stop_condition_zeta or stop_condition_1 or stop_condition_2 or stop_condition_alpha:
                     self.logger.info(f"{symbol} 停損/停利條件成立 ...")
