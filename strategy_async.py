@@ -703,7 +703,8 @@ class TradingHeroAlpha(Strategy):
                         gap_until_now_pct = 100 * (ask_price - self.__lastday_close[symbol]) / self.__lastday_close[
                             symbol]
                         stop_condition_zeta = (gap_until_now_pct > self.__zeta__)
-                        self.logger.debug(f"Zeta! ({symbol}:{gap_until_now_pct:.3f} %): {data}")
+                        if stop_condition_zeta:
+                            self.logger.debug(f"Zeta! ({symbol}:{gap_until_now_pct:.3f} %): {data}")
 
                     if self.__is_reload:
                         pass_data_flag = stop_condition_zeta or (not self.__on_going_orders_lock[symbol].locked())
