@@ -82,7 +82,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.13.1"
+    __version__ = "2024.13.2"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -280,7 +280,17 @@ class TradingHeroAlpha(Strategy):
         # Remove symbols that can do day-trade short sell
         self.logger.debug("Strategy.run - Cleaning symbol list ...")
 
-        if self.sdk_manager.sdk_version >= (1, 3, 1):
+        if self.__is_reload:  # remove all symbols that are not in the position_info
+            candidate_symbols = self.__symbols.copy()
+            self.__symbols = []
+
+            for symbol in candidate_symbols:
+                if symbol in self.__position_info:
+                    self.__symbols.append(symbol)
+
+            self.logger.debug(f"Reload - refined symbols: {self.__symbols}, position info: {self.__position_info}")
+
+        elif self.sdk_manager.sdk_version >= (1, 3, 1):
             candidate_symbols = self.__symbols.copy()
             self.__symbols = []
 
