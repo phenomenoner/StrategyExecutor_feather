@@ -856,16 +856,8 @@ class TradingHeroAlpha(Strategy):
 
                 else:
                     # Calculate price change
-                    try:
-                        baseline_price = float(data["price"]) if "price" in data else float(data["bid"])
-
-                    except Exception as error:
-                        baseline_price = float(data["bid"])
-
-                        self.logger.debug(
-                            f"{symbol} read price exception {error}. data: {data}. " +
-                            f"Traceback: {traceback.format_exc()}"
-                        )
+                    baseline_price = float(data["bid"])
+                    matched_price = float(data["price"])
 
                     price_change_pct_bid = 100 * (baseline_price - self.__lastday_close[symbol]) / \
                                            self.__lastday_close[symbol]
@@ -877,11 +869,11 @@ class TradingHeroAlpha(Strategy):
 
                     if is_sweet_range(price_change_pct_bid) and \
                             (
-                                    (
-                                            (baseline_price < self.__max_price_seen[symbol]) and
-                                            (baseline_price < self.__average_price[symbol])
-                                    ) or
-                                    is_open
+                                is_open or
+                                (
+                                    (matched_price < self.__max_price_seen[symbol]) and
+                                    (matched_price < self.__average_price[symbol])
+                                )
                             ):
                         fund_lock_checkpoint_start = time.time()
                         async with self.__fund_available_update_lock:
