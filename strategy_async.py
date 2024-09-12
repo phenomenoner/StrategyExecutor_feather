@@ -869,11 +869,11 @@ class TradingHeroAlpha(Strategy):
 
                     if is_sweet_range(price_change_pct_bid) and \
                             (
-                                is_open or
                                 (
                                     (matched_price < self.__max_price_seen[symbol]) and
                                     (matched_price < self.__average_price[symbol])
-                                )
+                                ) or
+                                is_open
                             ):
                         fund_lock_checkpoint_start = time.time()
                         async with self.__fund_available_update_lock:
