@@ -82,7 +82,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.13.2"
+    __version__ = "2024.13.3"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -852,7 +852,8 @@ class TradingHeroAlpha(Strategy):
                     self.logger.info(f"{symbol} 尚未納入進場列表: {self.__active_target_list}")
 
                 elif ("bid" not in data) or (float(data["bid"]) == 0):
-                    self.logger.debug(f"{symbol} 進場判斷邏輯讀無 bid 價格, data:\n{data}")
+                    if "isLimitUpBid" not in data:  # Do not need to output log, limit up has been reached
+                        self.logger.debug(f"{symbol} 進場判斷邏輯讀無 bid 價格, data:\n{data}")
 
                 else:
                     # Calculate price change
@@ -869,11 +870,11 @@ class TradingHeroAlpha(Strategy):
 
                     if is_sweet_range(price_change_pct_bid) and \
                             (
-                                (
-                                    (matched_price < self.__max_price_seen[symbol]) and
-                                    (matched_price < self.__average_price[symbol])
-                                ) or
-                                is_open
+                                    (
+                                        (matched_price < self.__max_price_seen[symbol]) and
+                                        (matched_price < self.__average_price[symbol])
+                                    ) or
+                                    is_open
                             ):
                         fund_lock_checkpoint_start = time.time()
                         async with self.__fund_available_update_lock:
