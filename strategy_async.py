@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from fubon_neo.sdk import Order
 from fubon_neo.constant import TimeInForce, OrderType, PriceType, MarketType, BSAction
 from concurrent.futures import ThreadPoolExecutor
+from itertools import islice
 
 
 class Strategy(ABC):
@@ -426,14 +427,9 @@ class TradingHeroAlpha(Strategy):
     async def __add_to_active_list(self, add_count: int):
         if not self.__is_all_symbol_included:
             async with self.__active_target_list_lock:
-                i = 0
-                for symbol in self.__symbols:
-                    if i >= add_count:
-                        break
-
-                    if symbol not in self.__active_target_list:
-                        self.__active_target_list.append(symbol)
-                        i += 1
+                symbols_to_add = (symbol for symbol in self.__symbols if symbol not in self.__active_target_list)
+                limited_symbols = islice(symbols_to_add, add_count)
+                self.__active_target_list.extend(limited_symbols)
 
     async def __position_sizing_agent(self):
         """
