@@ -412,10 +412,10 @@ class TradingHeroAlpha(Strategy):
         self.logger.debug("Strategy.run - Market data preparation has completed.")
 
         # Order update agents
-        t = asyncio.create_task(self.__order_status_updater())
+        t = self.__event_loop.create_task(self.__order_status_updater())
 
         # Position sizing agent
-        tps = asyncio.create_task(self.__position_sizing_agent())
+        tps = self.__event_loop.create_task(self.__position_sizing_agent())
 
         await self.__position_closure_executor()  # Position closure agent
         await tps
