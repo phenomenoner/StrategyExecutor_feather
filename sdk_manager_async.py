@@ -406,6 +406,7 @@ class SDKManager:
 
             if self.__is_marketdata_ws_connect:  # Already reconnected
                 self.__logger.debug(f"self.__is_marketdata_ws_connect is {self.__is_marketdata_ws_connect}, ignore...")
+
                 return
 
             if self.__is_relogin_running:

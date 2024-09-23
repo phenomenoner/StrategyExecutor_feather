@@ -158,7 +158,9 @@ class TradingHeroAlpha(Strategy):
         self.__enter_lot_limit: dict[str, int] = {}
         self.__max_lot_per_round = 2 # min(2, self.__enter_lot_limit)  # Maximum number of round to send order non-stopping
         self.__fund_available_update_lock = asyncio.Lock()
-        self.__active_target_list = []
+        self.__active_target_list: list[str] = []
+        self.__active_target_list_lock: asyncio.Lock = asyncio.Lock()
+        self.__is_all_symbol_included: bool = False
         self.logger.info(f"初始可用額度: {self.__fund_available} TWD")
         #self.logger.info(f"個股下單上限: {self.__enter_lot_limit} 張")
 
@@ -252,7 +254,7 @@ class TradingHeroAlpha(Strategy):
         # Run in executor
         response = await self.__event_loop.run_in_executor(
             self.__threadpool_executor,
-            place_order_partial
+            place_order_partial,
         )
 
         place_order_end_time = time.time()
@@ -421,16 +423,28 @@ class TradingHeroAlpha(Strategy):
 
         self.logger.debug(f"async run finished ...")
 
+    async def __add_to_active_list(self, add_count: int):
+        if not self.__is_all_symbol_included:
+            async with self.__active_target_list_lock:
+                i = 0
+                for symbol in self.__symbols:
+                    if i > add_count:
+                        break
+
+                    if symbol not in self.__active_target_list:
+                        self.__active_target_list.append(symbol)
+                        i += 1
+
     async def __position_sizing_agent(self):
         """
             Add x more symbols every y second after market open
         """
-        x = 6
-        y = 1
+        x = 3
+        y = 5
 
         now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
-        while now_time < datetime.time(8, 59, 58):
+        while now_time < datetime.time(8, 59, 55):
             await asyncio.sleep(1)
             now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
@@ -440,21 +454,14 @@ class TradingHeroAlpha(Strategy):
             if len(self.__active_target_list) == len(self.__symbols):
                 break
 
-            i = 0
-            for symbol in self.__symbols:
-                if i > x:
-                    break
-
-                if symbol not in self.__active_target_list:
-                    self.__active_target_list.append(symbol)
-                    i += 1
-
+            await self.__add_to_active_list(x)
             await asyncio.sleep(y)
 
             now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
         # All symbol included
         self.__active_target_list = self.__symbols
+        self.__is_all_symbol_included = True
         self.logger.debug(f"全進場標的列表 (time {now_time}): {self.__active_target_list}")
 
     async def __order_status_updater(self):
@@ -824,6 +831,9 @@ class TradingHeroAlpha(Strategy):
                     )
                     self.__symbols_task_done.append(symbol)
 
+                    # Add one more symbol to the active list for the replacement
+                    asyncio.ensure_future(self.__add_to_active_list(1), loop=self.__event_loop)
+
                     return
                 elif is_open:
                     self.logger.debug(f"{symbol} 開盤漲幅符合區間 (實際漲幅: {gap_change_pct:.2f} %). " +
@@ -908,6 +918,12 @@ class TradingHeroAlpha(Strategy):
 
                                 self.logger.info(f"{symbol} 預留下單額度更新: {pre_allocate_fund}")
                                 self.logger.info(f"可用額度更新: {self.__fund_available}")
+
+                    else:
+                        self.logger.debug(f"{symbol} 價格進場條件不符合, price change: {price_change_pct_bid} %, " +
+                                          f"matched_price: {matched_price}, " +
+                                          f"max_price: {self.__max_price_seen[symbol]}, " +
+                                          f"average_price: {self.__average_price[symbol]}, is_open: {is_open}")
 
                     # 進場操作
                     if quantity_to_bid >= 1000:
