@@ -428,7 +428,7 @@ class TradingHeroAlpha(Strategy):
             async with self.__active_target_list_lock:
                 i = 0
                 for symbol in self.__symbols:
-                    if i > add_count:
+                    if i >= add_count:
                         break
 
                     if symbol not in self.__active_target_list:
