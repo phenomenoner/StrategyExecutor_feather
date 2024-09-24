@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.13.5"
+    __version__ = "2024.13.7"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -305,11 +305,11 @@ class TradingHeroAlpha(Strategy):
                 while not is_success:
                     if retry_attempt_count >= 2:
                         self.logger.info(
-                            f"Failed to retrieve daytrade info for {symbol} too many time, skip this target")
+                            f"Failed to retrieve day-trade info for {symbol} too many time, skip this target")
                         break  # Proceed to the next symbol
 
                     elif not query.is_success:
-                        self.logger.debug(f"Fail retrieving daytrade info for {symbol}, retry later ...")
+                        self.logger.debug(f"Fail retrieving day-trade info for {symbol}, retry later ...")
                         retry_attempt_count += 1
 
                     else:
@@ -319,7 +319,7 @@ class TradingHeroAlpha(Strategy):
                                 self.__symbols.append(symbol)
                             else:
                                 self.logger.info(
-                                    f"{symbol}'s daytrade status: {query.data.status}, remove from the list")
+                                    f"{symbol}'s day-trade status: {query.data.status}, remove from the list")
 
                             is_success = True
                             break  # Proceed to the next symbol
@@ -446,7 +446,7 @@ class TradingHeroAlpha(Strategy):
 
         self.logger.debug(f"開始啟動加入進場標的 (time {now_time}) ...")
 
-        while now_time < datetime.time(9, 5, 15):
+        while now_time < datetime.time(9, 0, 15):
             if len(self.__active_target_list) == len(self.__symbols):
                 break
 
@@ -992,7 +992,7 @@ class TradingHeroAlpha(Strategy):
                                 else:
                                     self.__failed_order_count[symbol] = 1
 
-                                if self.__failed_order_count[symbol] >= 2:
+                                if (self.__failed_order_count[symbol] >= 2) or ("不可市價委託" in response.message):
                                     if (symbol in self.__open_order_placed) and \
                                             (self.__open_order_placed[symbol] > 0):
                                         self.logger.info(f"{symbol} 已進場 " +
@@ -1001,15 +1001,15 @@ class TradingHeroAlpha(Strategy):
                                         self.logger.info(f"{symbol} 不再確認進場訊號 ...")
                                         self.__suspend_entering_symbols.append(symbol)
 
-                                else:
-                                    self.logger.info(f"{symbol} 進場下單失敗次數達 2 次且未進場，移除標的")
-                                    self.__open_order_placed[symbol] = 99999
-                                    self.__event_loop.run_in_executor(
-                                        self.__threadpool_executor,
-                                        self.remove_realtime_marketdata,
-                                        symbol
-                                    )
-                                    self.__symbols_task_done.append(symbol)
+                                    else:
+                                        self.logger.info(f"{symbol} 進場下單失敗次數達 2 次且未進場，移除標的")
+                                        self.__open_order_placed[symbol] = 99999
+                                        self.__event_loop.run_in_executor(
+                                            self.__threadpool_executor,
+                                            self.remove_realtime_marketdata,
+                                            symbol
+                                        )
+                                        self.__symbols_task_done.append(symbol)
 
                                 # Cancel ramin quantity_to_bid
                                 quantity_to_bid = -99999
