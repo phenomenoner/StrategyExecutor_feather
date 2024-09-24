@@ -954,15 +954,15 @@ class TradingHeroAlpha(Strategy):
                                         self.logger.info(f"{symbol} 不再確認進場訊號 ...")
                                         self.__suspend_entering_symbols.append(symbol)
 
-                                else:
-                                    self.logger.info(f"{symbol} 進場下單失敗次數達 2 次且未進場，移除標的")
-                                    self.__open_order_placed[symbol] = 99999
-                                    self.__event_loop.run_in_executor(
-                                        self.__threadpool_executor,
-                                        self.remove_realtime_marketdata,
-                                        symbol
-                                    )
-                                    self.__symbols_task_done.append(symbol)
+                                    else:
+                                        self.logger.info(f"{symbol} 進場下單失敗次數達 2 次且未進場，移除標的")
+                                        self.__open_order_placed[symbol] = 99999
+                                        self.__event_loop.run_in_executor(
+                                            self.__threadpool_executor,
+                                            self.remove_realtime_marketdata,
+                                            symbol
+                                        )
+                                        self.__symbols_task_done.append(symbol)
 
                                 # Cancel ramin quantity_to_bid
                                 quantity_to_bid = -99999
