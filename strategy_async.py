@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.13.3"
+    __version__ = "2024.13.5"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -915,7 +915,7 @@ class TradingHeroAlpha(Strategy):
                                 self.logger.info(f"{symbol} 預留下單額度更新: {pre_allocate_fund}")
                                 self.logger.info(f"可用額度更新: {self.__fund_available}")
 
-                    else:
+                    elif is_open:
                         self.logger.debug(f"{symbol} 價格進場條件不符合, price change: {price_change_pct_bid} %, " +
                                           f"matched_price: {matched_price}, " +
                                           f"max_price: {self.__max_price_seen[symbol]}, " +
