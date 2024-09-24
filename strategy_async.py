@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.13.7"
+    __version__ = "2024.14.1"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -160,7 +160,6 @@ class TradingHeroAlpha(Strategy):
         self.__max_lot_per_round = 2 # min(2, self.__enter_lot_limit)  # Maximum number of round to send order non-stopping
         self.__fund_available_update_lock = asyncio.Lock()
         self.__active_target_list: list[str] = []
-        self.__active_target_list_lock: asyncio.Lock = asyncio.Lock()
         self.__is_all_symbol_included: bool = False
         self.logger.info(f"初始可用額度: {self.__fund_available} TWD")
         #self.logger.info(f"個股下單上限: {self.__enter_lot_limit} 張")
@@ -426,10 +425,12 @@ class TradingHeroAlpha(Strategy):
 
     async def __add_to_active_list(self, add_count: int):
         if not self.__is_all_symbol_included:
-            async with self.__active_target_list_lock:
-                symbols_to_add = (symbol for symbol in self.__symbols if symbol not in self.__active_target_list)
-                limited_symbols = islice(symbols_to_add, add_count)
-                self.__active_target_list.extend(limited_symbols)
+            symbols_to_add = (symbol for symbol in self.__symbols if symbol not in self.__active_target_list)
+            limited_symbols = islice(symbols_to_add, add_count)
+            self.__active_target_list.extend(limited_symbols)
+
+            if len(self.__active_target_list) == len(self.__symbols):
+                self.__is_all_symbol_included = True
 
     async def __position_sizing_agent(self):
         """
@@ -447,7 +448,7 @@ class TradingHeroAlpha(Strategy):
         self.logger.debug(f"開始啟動加入進場標的 (time {now_time}) ...")
 
         while now_time < datetime.time(9, 0, 15):
-            if len(self.__active_target_list) == len(self.__symbols):
+            if len(self.__active_target_list) >= 6: #== len(self.__symbols):
                 break
 
             await self.__add_to_active_list(x)
@@ -456,9 +457,9 @@ class TradingHeroAlpha(Strategy):
             now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
         # All symbol included
-        self.__active_target_list = self.__symbols
-        self.__is_all_symbol_included = True
-        self.logger.debug(f"全進場標的列表 (time {now_time}): {self.__active_target_list}")
+        # self.__active_target_list = self.__symbols
+        # self.__is_all_symbol_included = True
+        # self.logger.debug(f"全進場標的列表 (time {now_time}): {self.__active_target_list}")
 
     async def __order_status_updater(self):
         now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
@@ -738,7 +739,7 @@ class TradingHeroAlpha(Strategy):
                               f"traceback:\n{traceback.format_exc()}\n, data:\n{data}")
 
     async def __realtime_price_data_processor(self, data):
-        def order_success_routine(symbol, response, order_type):
+        def order_success_routine(symbol:str, response, order_type):
             try:
                 if order_type == "enter":
                     order_type_list = self.__order_type_enter
@@ -787,6 +788,16 @@ class TradingHeroAlpha(Strategy):
             else:
                 return -5 < change_pct < 5
 
+        def remove_symbol_at_entry_stage_routine(symbol: str):
+            self.__event_loop.run_in_executor(
+                self.__threadpool_executor,
+                self.remove_realtime_marketdata,
+                symbol
+            )
+            self.__symbols_task_done.append(symbol)
+
+            # Add one more symbol to the active list for the replacement
+            asyncio.ensure_future(self.__add_to_active_list(1), loop=self.__event_loop)
 
         # ########################
         #        Main body
@@ -820,15 +831,9 @@ class TradingHeroAlpha(Strategy):
                                      f"lastday_close: {self.__lastday_close[symbol]}, " +
                                       f"open_price_today: {self.__open_price_today[symbol]}")
                     self.__open_order_placed[symbol] = 99999
-                    self.__event_loop.run_in_executor(
-                        self.__threadpool_executor,
-                        self.remove_realtime_marketdata,
-                        symbol
-                    )
-                    self.__symbols_task_done.append(symbol)
 
-                    # Add one more symbol to the active list for the replacement
-                    asyncio.ensure_future(self.__add_to_active_list(1), loop=self.__event_loop)
+                    # Execute the routine
+                    remove_symbol_at_entry_stage_routine(symbol)
 
                     return
                 elif is_open:
@@ -1004,12 +1009,9 @@ class TradingHeroAlpha(Strategy):
                                     else:
                                         self.logger.info(f"{symbol} 進場下單失敗次數達 2 次且未進場，移除標的")
                                         self.__open_order_placed[symbol] = 99999
-                                        self.__event_loop.run_in_executor(
-                                            self.__threadpool_executor,
-                                            self.remove_realtime_marketdata,
-                                            symbol
-                                        )
-                                        self.__symbols_task_done.append(symbol)
+
+                                        # Execute the routine
+                                        remove_symbol_at_entry_stage_routine(symbol)
 
                                 # Cancel ramin quantity_to_bid
                                 quantity_to_bid = -99999
