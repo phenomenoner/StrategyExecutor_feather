@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.14.1"
+    __version__ = "2024.14.2"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -160,6 +160,7 @@ class TradingHeroAlpha(Strategy):
         self.__max_lot_per_round = 2 # min(2, self.__enter_lot_limit)  # Maximum number of round to send order non-stopping
         self.__fund_available_update_lock = asyncio.Lock()
         self.__active_target_list: list[str] = []
+        self.__not_in_active_target_list_notified: list[str] = []
         self.__is_all_symbol_included: bool = False
         self.logger.info(f"初始可用額度: {self.__fund_available} TWD")
         #self.logger.info(f"個股下單上限: {self.__enter_lot_limit} 張")
@@ -423,7 +424,10 @@ class TradingHeroAlpha(Strategy):
 
         self.logger.debug(f"async run finished ...")
 
-    async def __add_to_active_list(self, add_count: int):
+    async def __add_to_active_list(self, add_count: int, delay: float=0):
+        if delay > 0:
+            await asyncio.sleep(delay)
+
         if not self.__is_all_symbol_included:
             symbols_to_add = (symbol for symbol in self.__symbols if symbol not in self.__active_target_list)
             limited_symbols = islice(symbols_to_add, add_count)
@@ -860,7 +864,9 @@ class TradingHeroAlpha(Strategy):
                      self.__open_order_placed[symbol] < self.__enter_lot_limit[symbol]):
 
                 if symbol not in self.__active_target_list:
-                    self.logger.info(f"{symbol} 尚未納入進場列表: {self.__active_target_list}")
+                    if symbol not in self.__not_in_active_target_list_notified:
+                        self.logger.info(f"{symbol} 尚未納入進場列表: {self.__active_target_list}")
+                        self.__not_in_active_target_list_notified.append(symbol)
 
                 elif ("bid" not in data) or (float(data["bid"]) == 0):
                     if "isLimitUpBid" not in data:  # Do not need to output log, limit up has been reached
@@ -963,6 +969,10 @@ class TradingHeroAlpha(Strategy):
                                     self.__open_order_placed[symbol] += 1
                                 else:
                                     self.__open_order_placed[symbol] = 1
+
+                                    # Add one more symbol to the active list for the replacement
+                                    asyncio.ensure_future(self.__add_to_active_list(1, delay=10),
+                                                          loop=self.__event_loop)
 
                                 self.logger.info(
                                     f"{symbol} 進場下單成功, 總進場張數 {self.__open_order_placed[symbol]}")
