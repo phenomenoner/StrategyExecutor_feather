@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.14.3"
+    __version__ = "2024.14.5"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -1031,6 +1031,9 @@ class TradingHeroAlpha(Strategy):
                             self.__fund_available += pre_allocate_fund
                             self.logger.info(f"{symbol} 實際運用差額: {pre_allocate_fund}")
                             self.logger.info(f"可用額度更新: {self.__fund_available}")
+
+                        # Pause if enter successfully
+                        await asyncio.sleep(10)
 
             elif (symbol not in self.__open_order_placed) and (not self.__is_reload):  # 今天完全沒進場
                 self.logger.info(f"{symbol} 今日無進場，移除股價行情訂閱 ...")
