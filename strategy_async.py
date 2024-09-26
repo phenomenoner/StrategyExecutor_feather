@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.14.2"
+    __version__ = "2024.14.3"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -788,7 +788,7 @@ class TradingHeroAlpha(Strategy):
 
         def is_sweet_range(change_pct: float) -> bool:
             if self.__strategy_code__ == "cdl":
-                return 1 < change_pct < 5
+                return 1 < change_pct < 4
             else:
                 return -5 < change_pct < 5
 
@@ -901,10 +901,10 @@ class TradingHeroAlpha(Strategy):
 
                             # Calculate quantity to bid
                             if max_share_possible < 1000:
-                                # self.logger.info(f"剩餘可用額度不足, symbol {symbol}, price {data['bid']}, " +
-                                #                  f"fund_available {self.__fund_available}")
-                                # self.logger.info(f"{symbol} 稍後再確認進場訊號 ...")
-                                pass
+                                if is_open:
+                                    self.logger.info(f"剩餘可用額度不足, symbol {symbol}, price {data['bid']}, " +
+                                                     f"fund_available {self.__fund_available}")
+                                    self.logger.info(f"{symbol} 稍後再確認進場訊號 ...")
 
                             else:
                                 quantity_to_bid = int(self.__enter_lot_limit[symbol] * 1000)
@@ -967,7 +967,7 @@ class TradingHeroAlpha(Strategy):
                                 # Update the order record
                                 if symbol in self.__open_order_placed:
                                     self.__open_order_placed[symbol] += 1
-                                else:
+                                else:  # The first time to buy this product
                                     self.__open_order_placed[symbol] = 1
 
                                     # Add one more symbol to the active list for the replacement
@@ -1068,7 +1068,7 @@ class TradingHeroAlpha(Strategy):
                 # stop_condition_2 = (not is_early_session) and (current_pnl_pct <= -3)
                 # stop_condition_alpha = current_pnl_pct < self.__trail_stop_profit_cutoff[symbol]
                 if self.__strategy_code__ == "cdl":
-                    stop_condition_1 = current_pnl_pct < -3.5
+                    stop_condition_1 = current_pnl_pct < -4.5
                     stop_condition_2 = stop_condition_alpha = False
                 else:
                     stop_condition_1 = stop_condition_2 = stop_condition_alpha = False
