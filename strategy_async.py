@@ -1033,7 +1033,8 @@ class TradingHeroAlpha(Strategy):
                             self.logger.info(f"可用額度更新: {self.__fund_available}")
 
                         # Pause if enter successfully
-                        await asyncio.sleep(10)
+                        if quantity_has_bid > 0:
+                            await asyncio.sleep(10)
 
             elif (symbol not in self.__open_order_placed) and (not self.__is_reload):  # 今天完全沒進場
                 self.logger.info(f"{symbol} 今日無進場，移除股價行情訂閱 ...")
