@@ -383,7 +383,7 @@ class TradingHeroAlpha(Strategy):
         self.sdk_manager.set_trade_handle_func("on_filled", self.__order_filled_processor)
         self.sdk_manager.set_ws_handle_func("message", self.__price_data_callback)
 
-        self.logger.info("Strategy.run - Initialize price data queue and processing tasks per symbol ...")
+        self.logger.info("Strategy.run - Initialize price data processing variables ...")
 
         self.__on_going_orders_lock = {symbol: asyncio.Lock() for symbol in self.__symbols}
         self.__trail_stop_profit_cutoff = {symbol: -999 for symbol in self.__symbols}
