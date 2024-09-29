@@ -445,7 +445,7 @@ class TradingHeroAlpha(Strategy):
 
         now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
-        while now_time < datetime.time(8, 59, 55):
+        while now_time < datetime.time(8, 59, 50):
             await asyncio.sleep(1)
             now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
