@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.14.5"
+    __version__ = "2024.14.6"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -788,9 +788,9 @@ class TradingHeroAlpha(Strategy):
 
         def is_sweet_range(change_pct: float) -> bool:
             if self.__strategy_code__ == "cdl":
-                return 1 < change_pct < 4
+                return 1 < change_pct < 4.5
             else:
-                return -5 < change_pct < 5
+                return -5 < change_pct < 3
 
         def remove_symbol_at_entry_stage_routine(symbol: str):
             self.__event_loop.run_in_executor(
@@ -1055,9 +1055,9 @@ class TradingHeroAlpha(Strategy):
                 ask_price = float(data["ask"]) if ("ask" in data and float(data["ask"]) > 0) else float(
                     data["price"])  # Add if for robustness
 
-                current_pnl_pct = 100 * (sell_price - ask_price) / ask_price
                 gap_until_now_pct = 100 * (ask_price - self.__lastday_close[symbol]) / self.__lastday_close[
                     symbol]
+                # current_pnl_pct = 100 * (sell_price - ask_price) / ask_price
                 # is_early_session = now_time <= datetime.time(9, 30)
 
                 # if (self.__trail_stop_profit_cutoff[symbol] < 0) and (current_pnl_pct >= 3.5):
@@ -1071,11 +1071,12 @@ class TradingHeroAlpha(Strategy):
                 # stop_condition_1 = is_early_session and (current_pnl_pct <= -5)
                 # stop_condition_2 = (not is_early_session) and (current_pnl_pct <= -3)
                 # stop_condition_alpha = current_pnl_pct < self.__trail_stop_profit_cutoff[symbol]
-                if self.__strategy_code__ == "cdl":
-                    stop_condition_1 = current_pnl_pct < -4.5
-                    stop_condition_2 = stop_condition_alpha = False
-                else:
-                    stop_condition_1 = stop_condition_2 = stop_condition_alpha = False
+
+                # if self.__strategy_code__ == "cdl":
+                #     stop_condition_1 = False #current_pnl_pct < -4.5
+                #     stop_condition_2 = stop_condition_alpha = False
+                # else:
+                stop_condition_1 = stop_condition_2 = stop_condition_alpha = False
 
                 stop_condition_zeta = (gap_until_now_pct > self.__zeta__)
 
@@ -1129,7 +1130,7 @@ class TradingHeroAlpha(Strategy):
                         elif (response.message is not None) and ("集合競價" in response.message):
                             self.logger.info(f"集合競價! 失敗停損/停利出場委託單直回:\n{response}")
 
-                            if current_pnl_pct < 0 or stop_condition_zeta:
+                            if stop_condition_zeta: #current_pnl_pct < 0 or stop_condition_zeta:
                                 self.logger.info(f"集合競價停損, 斷然出場 ...")
 
                                 order = Order(
