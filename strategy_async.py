@@ -490,8 +490,9 @@ class TradingHeroAlpha(Strategy):
                                 order_no = str(d.order_no)
                                 symbol = str(d.stock_no)
                                 status = int(d.status)
+                                marker = str(d.user_def)
 
-                                if (status != 10) and (status != 50):
+                                if ("hvl" in marker) and (status != 10) and (status != 50):
                                     if not self.__on_going_orders_lock[symbol].locked():
                                         async with self.__on_going_orders_lock[symbol]:
                                             try:
