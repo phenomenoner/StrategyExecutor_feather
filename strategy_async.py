@@ -710,7 +710,7 @@ class TradingHeroAlpha(Strategy):
 
                 except (KeyError, ValueError) as err:
                     if is_open:
-                        self.logger.info(f"Market open without price! {symbol}: {data}")
+                        self.logger.info(f"Market open without price! Symbol: {symbol}, data: {data}")
                     else:
                         self.logger.debug(f"__price_data_callback exception: {err}, " +
                                           f"traceback:\n{traceback.format_exc()}\n, data:\n{data}")
@@ -821,10 +821,12 @@ class TradingHeroAlpha(Strategy):
                                  f"lastday_close: {self.__lastday_close[symbol]}, " +
                                  f"open_price_today: {self.__open_price_today[symbol]}")
                 self.__open_order_placed[symbol] = 99999
-                pass_the_check = False
 
                 # Execute the routine
                 remove_symbol_at_entry_stage_routine(symbol)
+
+                # Alter the pass flag
+                pass_the_check = False
 
             else:
                 self.logger.info(f"{symbol} 開盤漲幅符合區間 (實際漲幅: {gap_change_pct:.2f} %). " +
@@ -881,6 +883,7 @@ class TradingHeroAlpha(Strategy):
                                           f"Exception: {err},\n{traceback.format_exc()}")
 
                         # Remove the symbol and skip
+                        self.__open_order_placed[symbol] = 99999
                         remove_symbol_at_entry_stage_routine(symbol)
                         return
 
