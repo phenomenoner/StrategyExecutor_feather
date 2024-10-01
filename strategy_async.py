@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.14.6"
+    __version__ = "2024.15.1"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -173,6 +173,8 @@ class TradingHeroAlpha(Strategy):
         self.__strategy_enter_cutoff_time = datetime.time(9, 45)
         self.__market_close_time = datetime.time(13, 32)
         self.__is_market_close_time_passed = False  # Flag for using self.__price_data_queue_handler()
+
+        self.__program_start_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
         # ThreadPoolExecutor
         self.__threadpool_executor = ThreadPoolExecutor()
@@ -707,8 +709,12 @@ class TradingHeroAlpha(Strategy):
                             numpy.mean(self.__past_prices_seen[symbol])
 
                 except (KeyError, ValueError) as err:
-                    self.logger.debug(f"__price_data_callback exception: {err}, " +
-                                      f"traceback:\n{traceback.format_exc()}\n, data:\n{data}")
+                    if is_open:
+                        self.logger.info(f"Market open without price! {symbol}: {data}")
+                    else:
+                        self.logger.debug(f"__price_data_callback exception: {err}, " +
+                                          f"traceback:\n{traceback.format_exc()}\n, data:\n{data}")
+
                     return
 
                 if is_open or (symbol not in self.__open_price_today):
@@ -804,6 +810,31 @@ class TradingHeroAlpha(Strategy):
             # Add one more symbol to the active list for the replacement
             asyncio.ensure_future(self.__add_to_active_list(1), loop=self.__event_loop)
 
+        def open_check(symbol: str, is_open_flag: bool) -> (bool, bool):
+            gap_change_pct = 100 * (self.__open_price_today[symbol] - self.__lastday_close[symbol]) \
+                             / self.__lastday_close[symbol]
+
+            pass_the_check = True
+
+            if not is_sweet_range(gap_change_pct):  # Do not trade this target today
+                self.logger.info(f"{symbol} 開盤漲幅超過區間 (實際漲幅: {gap_change_pct:.2f} %)，移除標的" +
+                                 f"lastday_close: {self.__lastday_close[symbol]}, " +
+                                 f"open_price_today: {self.__open_price_today[symbol]}")
+                self.__open_order_placed[symbol] = 99999
+                pass_the_check = False
+
+                # Execute the routine
+                remove_symbol_at_entry_stage_routine(symbol)
+
+            else:
+                self.logger.info(f"{symbol} 開盤漲幅符合區間 (實際漲幅: {gap_change_pct:.2f} %). " +
+                                 f"lastday_close: {self.__lastday_close[symbol]}, " +
+                                 f"open_price_today: {self.__open_price_today[symbol]}")
+
+                is_open_flag = True  # When this case happens, see as if it is the open tick (i.e., de facto)
+
+            return pass_the_check, is_open_flag
+
         # ########################
         #        Main body
         # ########################
@@ -826,26 +857,32 @@ class TradingHeroAlpha(Strategy):
                     (is_open or is_continuous) and \
                     ("price" in data) and (not self.__is_reload):
 
-                self.__open_price_today[symbol] = float(data["price"])
+                if is_open or (self.__program_start_time < datetime.time(9, 0, 0)):
+                    self.__open_price_today[symbol] = float(data["price"])
+                    is_pass, is_open = open_check(symbol, is_open)  # Override is_open
 
-                gap_change_pct = 100 * (self.__open_price_today[symbol] - self.__lastday_close[symbol]) \
-                                 / self.__lastday_close[symbol]
+                    if not is_pass:
+                        return
 
-                if not is_sweet_range(gap_change_pct):  # Do not trade this target today
-                    self.logger.info(f"{symbol} 開盤漲幅超過區間 (實際漲幅: {gap_change_pct:.2f} %)，移除標的" +
-                                     f"lastday_close: {self.__lastday_close[symbol]}, " +
-                                      f"open_price_today: {self.__open_price_today[symbol]}")
-                    self.__open_order_placed[symbol] = 99999
+                else:   # The program started after 9AM, and missed the open tick
+                    try:
+                        # Get the open price by the web API
+                        quote = self.sdk_manager.sdk.marketdata.rest_client.stock.intraday.quote(symbol=symbol)
+                        open_price = quote["openPrice"]
 
-                    # Execute the routine
-                    remove_symbol_at_entry_stage_routine(symbol)
+                        self.__open_price_today[symbol] = float(open_price)
+                        is_pass, _ = open_check(symbol, is_open)  # Don't override is_open
 
-                    return
-                elif is_open:
-                    self.logger.debug(f"{symbol} 開盤漲幅符合區間 (實際漲幅: {gap_change_pct:.2f} %). " +
-                                      f"lastday_close: {self.__lastday_close[symbol]}, " +
-                                      f"open_price_today: {self.__open_price_today[symbol]}")
+                        if not is_pass:
+                            return
 
+                    except Exception as err:
+                        self.logger.error(f"Retrieve quote for {symbol} failed. " +
+                                          f"Exception: {err},\n{traceback.format_exc()}")
+
+                        # Remove the symbol and skip
+                        remove_symbol_at_entry_stage_routine(symbol)
+                        return
 
             # Start trading logic =============
             order_lock_checkpoint_start = time.time()
@@ -931,7 +968,8 @@ class TradingHeroAlpha(Strategy):
                         self.logger.debug(f"{symbol} 價格進場條件不符合, price change: {price_change_pct_bid} %, " +
                                           f"matched_price: {matched_price}, " +
                                           f"max_price: {self.__max_price_seen[symbol]}, " +
-                                          f"average_price: {self.__average_price[symbol]}, is_open: {is_open}")
+                                          f"average_price: {self.__average_price[symbol]}, " +
+                                          f"baseline_price: {baseline_price}, is_open: {is_open}")
 
                     # 進場操作
                     if quantity_to_bid >= 1000:
