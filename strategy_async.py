@@ -104,7 +104,7 @@ class TradingHeroAlpha(Strategy):
         self.queue: multiprocessing.Queue = the_queue
 
         # Setup target symbols
-        self.__symbols = ['00887', '6598', '3710', '6651', '3540', '6754', '3592', '4105', '6456', '6591', '3325', '6261', '3563', '3694', '4939', '4129', '3083', '6573', '8183', '8155']  # 輸入股票代碼
+        self.__symbols = ['00887', '3694']  # 輸入股票代碼
 
         self.__symbols_task_done = []
 
