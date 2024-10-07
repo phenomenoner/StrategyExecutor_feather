@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.15.1"
+    __version__ = "2024.15.2"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -797,7 +797,7 @@ class TradingHeroAlpha(Strategy):
             if self.__strategy_code__ == "cdl":
                 return 1 < change_pct < 4.5
             else:
-                return -5 < change_pct < 3
+                return -5 < change_pct < 5
 
         def remove_symbol_at_entry_stage_routine(symbol: str):
             self.__event_loop.run_in_executor(
