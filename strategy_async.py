@@ -98,7 +98,7 @@ class TradingHeroAlpha(Strategy):
 
         # Info
         self.logger.info(f"Strategy version: {self.__version__}")
-        self.logger.info(f"Is cdl? {self.__strategy_code__ == "cdl"}")
+        self.logger.info(f"Is cdl? {self.__strategy_code__ == 'cdl'}")
 
         # Multiprocessing queue
         self.queue: multiprocessing.Queue = the_queue
@@ -360,7 +360,7 @@ class TradingHeroAlpha(Strategy):
                         await asyncio.sleep(60)
                     elif datetime.datetime.strptime(response["date"], "%Y-%m-%d").date() != \
                             datetime.datetime.now(ZoneInfo("Asia/Taipei")).date():
-                        self.logger.info(f"Date {response["date"]} is not today, wait and try again ...")
+                        self.logger.info(f"Date {response['date']} is not today, wait and try again ...")
                         # self.logger.debug(f"data:\n{response}")
                         await asyncio.sleep(60)
                     else:
