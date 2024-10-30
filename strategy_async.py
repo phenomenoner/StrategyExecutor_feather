@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.15.2"
+    __version__ = "2024.15.3"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -442,8 +442,10 @@ class TradingHeroAlpha(Strategy):
         """
             Add x more symbols every y second after market open
         """
-        x = 3
-        y = 5
+        x: int = 3
+        y: int = 5
+
+        initial_candidate_count: int = 6 if (self.__strategy_code__ != "cdl") else len(self.__symbols)
 
         now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
@@ -454,7 +456,7 @@ class TradingHeroAlpha(Strategy):
         self.logger.debug(f"開始啟動加入進場標的 (time {now_time}) ...")
 
         while now_time < datetime.time(9, 0, 15):
-            if len(self.__active_target_list) >= 6: #== len(self.__symbols):
+            if len(self.__active_target_list) >= initial_candidate_count:
                 break
 
             await self.__add_to_active_list(x)

@@ -508,9 +508,6 @@ class SDKManager:
                     self.__logger.debug(f"建立第 {i + 1} 條連線")
 
                     # Doing the connection with timeout
-                    # t = threading.Thread(target=self.__connection_operator)
-                    # t.start()
-                    # t.join(5)
                     t = self.__threadpool_executor.submit(
                         self.__connection_operator
                     )
