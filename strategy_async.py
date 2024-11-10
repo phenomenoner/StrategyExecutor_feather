@@ -157,7 +157,7 @@ class TradingHeroAlpha(Strategy):
         self.__fund_available = 420000  # 總下單額度控管
         # self.__enter_lot_limit = 3  # 單一商品總下單張數上限
         self.__enter_lot_limit: dict[str, int] = {}
-        self.__max_lot_per_round = 2 # min(2, self.__enter_lot_limit)  # Maximum number of round to send order non-stopping
+        self.__max_lot_per_round = 1 # min(2, self.__enter_lot_limit)  # Maximum number of round to send order non-stopping
         self.__fund_available_update_lock = asyncio.Lock()
         self.__active_target_list: list[str] = []
         self.__not_in_active_target_list_notified: list[str] = []
@@ -445,7 +445,7 @@ class TradingHeroAlpha(Strategy):
         x: int = 3
         y: int = 5
 
-        initial_candidate_count: int = 6 if (self.__strategy_code__ != "cdl") else len(self.__symbols)
+        initial_candidate_count: int = 6 if (self.__strategy_code__ != "cdl") else 12
 
         now_time = datetime.datetime.now(ZoneInfo("Asia/Taipei")).time()
 
@@ -795,9 +795,12 @@ class TradingHeroAlpha(Strategy):
                 self.logger.error(f"exit_order_success_routine failed! Exception: {er}, " +
                                   f"traceback: {traceback.format_exc()}")
 
-        def is_sweet_range(change_pct: float) -> bool:
+        def is_sweet_range(change_pct: float, is_open: bool=False) -> bool:
             if self.__strategy_code__ == "cdl":
-                return 1 < change_pct < 4.5
+                if not is_open:
+                    return 1 < change_pct < 4.5
+                else:
+                    return 0 < change_pct < 4.5
             else:
                 return -5 < change_pct < 5
 
@@ -928,7 +931,7 @@ class TradingHeroAlpha(Strategy):
                     pre_allocate_fund = 0
                     fund_lock_checkpoint_start = fund_lock_checkpoint_end = 0  # init the timer variables
 
-                    if is_sweet_range(price_change_pct_bid) and \
+                    if is_sweet_range(price_change_pct_bid, is_open) and \
                             (
                                     (
                                         (matched_price < self.__max_price_seen[symbol]) and
