@@ -83,7 +83,7 @@ class Strategy(ABC):
 
 
 class TradingHeroAlpha(Strategy):
-    __version__ = "2024.15.3"
+    __version__ = "2024.15.5"
     __strategy_code__ = "cdl"
     __zeta__ = 8.6
 
@@ -91,7 +91,7 @@ class TradingHeroAlpha(Strategy):
         if self.__strategy_code__ == "cdl":
             return min(5, max(round(2 * (80 / previous_close)), 1))
         else:
-            return min(5, max(round(2 * (120 / previous_close)), 1))
+            return min(5, max(round(1.5 * (50 / previous_close)), 1))
 
     def __init__(self, the_queue: multiprocessing.Queue, logger=None, log_level=logging.DEBUG):
         super().__init__(logger=logger, log_level=log_level)
