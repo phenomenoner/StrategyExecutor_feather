@@ -359,8 +359,8 @@ class SDKManager:
 
     def __handle_trade_ws_event(self, code, message):
         if code in ["300"]:
-            if self.__termination_initiated:
-                self.__logger.info(f"交易連線異常，啟動重新連線 ..., code {code}")
+            self.__logger.info(f"交易連線異常，啟動重新連線 ..., code {code}")
+            
             try:
                 self.sdk.logout()
             except Exception as e:
