@@ -106,11 +106,6 @@ class SDKManager:
         # Async
         self.__trade_message_queue = asyncio.Queue()
         self.__event_loop = asyncio.new_event_loop()
-        # self.__async_thread = threading.Thread(
-        #     target=self.__event_loop.run_until_complete,
-        #     args=(self.__async_keep_running(),)
-        # )
-        # self.__async_thread.start()
         self.__async_thread = self.__threadpool_executor.submit(
             self.__event_loop.run_until_complete,
             self.__async_keep_running()
