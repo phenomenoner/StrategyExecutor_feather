@@ -15,7 +15,7 @@
 
 ## 如何使用?
 
-主要設定兩個部分，第一個是用 .env檔案寫入登入資訊
+主要設定兩個部分，第一個是用 .env 檔案寫入登入資訊
 
 ```python
 ID=A123456789                                         # 身分證字號
@@ -24,10 +24,14 @@ TRADEPASS=mytradepassword                             # 交易密碼
 CERTPASSS=mycertificatepassword                       # 憑證密碼
 ACTIVEACCOUNT=1111111                                 # 下單用帳號 (不包含開戶營業點代碼)
 ```
-第二個是可以改 ``strategy_async.py`` 裡面的主要參數
+第二個是可以改 ``strategy_async_demo.py`` 裡面的主要參數
 
 ```python
 class TradingHeroAlpha(Strategy):
+    # Position sizing algo demonstration
+    def position_algo(self, previous_close: float) -> int:
+        ...
+    
    def __init__(...):
 
       ...
@@ -39,8 +43,8 @@ class TradingHeroAlpha(Strategy):
    
       # Position sizing
      self.__fund_available = 500000  # 總下單額度控管
-     self.__enter_lot_limit = 6  # 單一商品總下單張數上限
-     self.__max_lot_per_round = min(2, self.__enter_lot_limit)  # 每次觸發下單要下幾張，會一張一張連續下單
+     #self.__enter_lot_limit = 6  # (Note. Use self.position_algo instead)
+     self.__max_lot_per_round = 1 #min(2, self.__enter_lot_limit)  # 每次觸發下單要下幾張，會一張一張連續下單
    
      ...
    
